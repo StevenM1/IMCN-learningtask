@@ -1,0 +1,36 @@
+No choice made
+Points earned: 0
+(Too slow!)
+
+
+Outcome: 1
+Points earned: 0
+(Too slow!)
+
+
+Outcome: 0
+Points earned: 0
+(Too slow!)
+
+
+Outcome: 1
+Points earned: 0
+(Too fast!)
+
+
+Outcome: 0
+Points earned: 0
+(Too fast!)
+
+
+Outcome: 1
+Points earned: 1
+
+
+
+Outcome: 0
+Points earned: 0
+
+
+
+Total score:
