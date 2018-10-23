@@ -27,7 +27,7 @@ class LearningSession(MRISession):
         self.warmup_trs = config.get('mri', 'warmup_trs')
 
         if tr == 2:
-            self.trial_duration = 8 - .5
+            self.trial_duration = 8 - 0.5
         elif tr == 3:
             self.trial_duration = 9 - 0.5
         elif tr == 0:
@@ -289,14 +289,10 @@ class LearningSession(MRISession):
                 for phase_n in np.arange(8):
                     if 'phase_' + str(phase_n) in this_trial_info.keys():
                         these_phase_durations[phase_n] = this_trial_info['phase_' + str(phase_n)]
-                # these_phase_durations[1] = this_trial_info['jitter_1']
-                # these_phase_durations[3] = this_trial_info['jitter_3']
-                # these_phase_durations[5] = this_trial_info['jitter_5']
-                # if trial_duration is not None:
-                #     these_phase_durations[7] = trial_duration - np.sum(these_phase_durations[1:7])
 
                 # NB we stop the trial 0.5s before the start of the new trial, to allow sufficient computation time
-                # for preparing the next trial.
+                # for preparing the next trial. (but never below 0.1s)
+                these_phase_durations[-1] = np.max([0.1, these_phase_durations[-1]-0.5])
 
                 this_trial = LearningTrial(ID=int(this_trial_info.trial_ID),
                                            parameters=this_trial_parameters,
@@ -322,15 +318,6 @@ class LearningSession(MRISession):
                 # trial_handler.addData('stimulus_onset_time_block_measured', this_trial.jitter_time -
                 #                       self.block_start_time)
                 # Counter-intuitive, but jitter_time is END of the jitter period = onset of stim
-
-                # # Update staircase if this was a stop trial
-                # if is_stop_trial:
-                #     if this_trial.response_measured:
-                #         # Failed stop: Decrease SSD
-                #         self.stairs[this_trial_staircase_id].addData(1)
-                #     else:
-                #         # Successful stop: Increase SSD
-                #         self.stairs[this_trial_staircase_id].addData(0)
 
                 if self.stopped:
                     # out of trial
