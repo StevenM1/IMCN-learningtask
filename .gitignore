@@ -116,3 +116,6 @@ designs/
 
 # MacOS
 .DS_Store
+*.DS_Store
+.DS_store
+*/.DS_store
