@@ -109,3 +109,10 @@ docs/
 designs/
 .DS_Store
 .DS_store
+
+
+# PyCharm
+.idea
+
+# MacOS
+.DS_Store
