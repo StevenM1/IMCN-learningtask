@@ -5,7 +5,9 @@
 Created on 16 Aug 2017
 Based on Nipype Configuration file
 logging options : INFO, DEBUG
-@author: Gilles de Hollander '''
+@author: Gilles de Hollander
+Edited by SM
+'''
 
 try:
     import configparser
@@ -21,9 +23,9 @@ list_vars = [('screen', 'physical_screen_size'),
              ('screen', 'background_color'),
              ('screen', 'size'),
              ('screen', 'max_lums'),
-             ('stimulus', 'color_set_1'),
-             ('stimulus', 'color_set_2'),
-             ('stimulus', 'color_set_3'),
+             ('stimulus', 'set_1'),
+             ('stimulus', 'set_2'),
+             ('stimulus', 'set_3'),
              ('stimulus', 'x_pos'),
              ('fixation_cross', 'bg')]
 
@@ -35,10 +37,12 @@ boolean_vars = [('screen', 'wait_blanking'),
 str_vars = [('mri', 'mri_trigger_key'),
             ('stimulus', 'line_color'),
             ('stimulus', 'units'),
+            ('stimulus', 'type'),
             ('screen', 'monitor_name'),
             ('input', 'response_button_left'),
             ('input', 'response_button_right'),
             ('text', 'units')]
+
 
 class ExpToolsConfig(object):
 

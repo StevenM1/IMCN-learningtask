@@ -8,10 +8,6 @@ import glob
 import pandas as pd
 import numpy as np
 import os
-import pyaudio
-import subprocess
-import wave
-from scipy.io import wavfile
 import copy
 import cPickle as pkl
 
@@ -56,32 +52,24 @@ class LearningSession(MRISession):
         # TODO: think about really including this?
         self.screen.recordFrameIntervals = True
 
-        self.phase_durations = np.array([-0.0001,  # wait for scan pulse
-                                         1,
-                                         1,
-                                         1,
-                                         1,
-                                         1])
+        # negative durations below are jittered and will be determined per trial (except phase 0)
+        self.phase_durations = np.array([-0.0001,  # phase 0: wait for scan pulse
+                                         -0.1,  # phase 1: fix cross
+                                         1,     # phase 2: cue
+                                         -0.1,  # phase 3: fix cross
+                                         2,     # phase 4: stimulus
+                                         -0.1,  # phase 5: choice highlight
+                                         0.5,   # phase 6: feedback
+                                         -.01   # phase 7: ITI
+                                         ])
 
         self.load_design()
         self.prepare_objects()
 
     def load_design(self):
 
-        self.design = pd.DataFrame({'trial_ID': [1, 2, 3, 4, 5, 6],
-                                    'stimulus_set': [0, 1, 2, 0, 1, 2],
-                                    'reverse_order': [False, False, False, True, True, True],
-                                    'block': [0, 0, 0, 0, 0, 0],
-                                    'correct_response': [1, 1, 1, 0, 0, 0],
-                                    'p_win': [[.8, .2], [.8, .2], [.8, .2], [.8, .2], [.8, .2], [.8, .2]]})
-
-        # fn = 'sub-' + str(self.subject_initials).zfill(3) + '_tr-' + str(self.index_number) + '_design'
-        # design = pd.read_csv(os.path.join('designs', fn + '.csv'), sep='\t', index_col=False)
-        #
-        # self.design = design
-        # self.design = self.design.apply(pd.to_numeric)  # cast all to numeric
-#        self.design.stop_trial = pd.to_
-#        print(self.design)
+        fn = 'sub-' + str(self.subject_initials).zfill(2) + '_tr-2_design'
+        self.design = pd.read_csv(os.path.join('designs', fn + '.csv'), sep='\t', index_col=False)
 
     def prepare_objects(self):
         """
@@ -96,17 +84,31 @@ class LearningSession(MRISession):
                                             inner_radius=config.get('fixation_cross', 'inner_radius'),
                                             bg=config.get('fixation_cross', 'bg'))
 
+        # checkout if stimulus type is interpreted
+        if not config.get('stimulus', 'type') in ['colors', 'agathodaimon']:
+            raise(IOError('No idea what stimulus type I should draw. You entered %s' % config.get('stimulus', 'type')))
+        # checkout if colors exist
+        if config.get('stimulus', 'type') == 'colors':
+            import matplotlib.colors as mcolors
+            for set in ['set_1', 'set_2', 'set_3']:
+                for col in config.get('stimulus', set):
+                    if not col in mcolors.CSS4_COLORS.keys():
+                        raise(IOError('I dont understand color %s that was provided to stimulus set %s...' %(col,
+                                                                                                             set)))
+
         # Stimuli
         self.stimuli = []
-        all_stim = [config.get('stimulus', 'color_set_1'),
-                    config.get('stimulus', 'color_set_2'),
-                    config.get('stimulus', 'color_set_3')]
+        all_stim = [config.get('stimulus', 'set_1'),
+                    config.get('stimulus', 'set_2'),
+                    config.get('stimulus', 'set_3')]
         for stim in all_stim:
             self.stimuli.append(
                 LearningStimulus(self.screen,
+                                 stimulus_type=config.get('stimulus', 'type'),
                                  width=config.get('stimulus', 'width'),
                                  height=config.get('stimulus', 'height'),
-                                 colors=stim,
+                                 set=stim,
+                                 text_height=config.get('stimulus', 'text_height'),
                                  units=config.get('stimulus', 'units'),
                                  x_pos=config.get('stimulus', 'x_pos'),
                                  rect_line_width=config.get('stimulus', 'rect_line_width')))
@@ -156,6 +158,20 @@ class LearningSession(MRISession):
                             height=config.get('text', 'height')),
         ]
 
+        # Prepare cue texts. Rendering of text is supposedly slow so better to do this once only (not every
+        # trial)
+        self.cues = [
+            # 0 = SPD
+            visual.TextStim(win=self.screen, text="SPD",
+                            units=config.get('text', 'units'),
+                            height=config.get('text', 'height')),
+
+            # 1 = ACC
+            visual.TextStim(win=self.screen, text="ACC",
+                            units=config.get('text', 'units'),
+                            height=config.get('text', 'height'))
+        ]
+
         # Waiting for scanner screen
         self.scanner_wait_screen = visual.TextStim(win=self.screen,
                                                    text='Waiting for scanner...',
@@ -164,11 +180,18 @@ class LearningSession(MRISession):
                                                    italic=True,
                                                    height=config.get('text', 'height'), alignHoriz='center')
 
-        # if self.subject_initials == 'DEBUG':
-        #     self.stop_timing_circle = visual.Circle(win=self.screen,
-        #                                             radius=3, edges=50, lineWidth=1.5, fillColor='red',
-        #                                             lineColor='red', units='deg',
-        #                                             lineColorSpace='rgb', fillColorSpace='rgb')
+        if self.subject_initials == 'DEBUG':
+             pos = -config.get('screen', 'size')[0]/3, config.get('screen', 'size')[1]/3
+             self.debug_txt = visual.TextStim(win=self.screen,
+                                              alignVert='top',
+                                              text='debug mode\n',
+                                              name='debug_txt',
+                                              units='pix',  # config.get('text', 'units'),
+                                              font='Helvetica Neue',
+                                              pos=pos,
+                                              height=14,  # config.get('text', 'height'),
+                                              alignHoriz='center')
+
 
     def save_data(self, trial_handler=None, block_n='all'):
 
@@ -235,7 +258,8 @@ class LearningSession(MRISession):
                 continue
             this_block_design = self.design.loc[self.design.block == block_n]
 
-            # scanner_emulator = launchScan(win=self.screen, settings={'TR': trs[block_n-1], 'volumes': n_vols[block_n-1],
+            # scanner_emulator = launchScan(win=self.screen, settings={'TR': trs[block_n-1],
+            #                                                          'volumes': n_vols[block_n-1],
             #                                                          'sync': 't'},
             #                               mode='Test')
 
@@ -251,17 +275,21 @@ class LearningSession(MRISession):
             for block_trial_ID, this_trial_info in enumerate(trial_handler):
 
                 this_trial_parameters = {'stimulus_set': int(this_trial_info['stimulus_set']),
-                                         'reverse_order': bool(this_trial_info['reverse_order']),
+                                         'correct_stim_lr': bool(this_trial_info['correct_stim_lr']),
+                                         'correct_response': this_trial_info['correct_stim_lr'],
                                          'block': block_n,
                                          'block_trial_ID': block_trial_ID,
-                                         'correct_response': this_trial_info['correct_response'],
-                                         'p_win': this_trial_info['p_win']}
+                                         'p_win': [this_trial_info['p_win_left'], this_trial_info['p_win_right']],
+                                         'cue': this_trial_info['cue']}
 
                 these_phase_durations = self.phase_durations.copy()
-#                these_phase_durations[1] = this_trial_info.jitter
+                these_phase_durations[1] = this_trial_info['jitter_1']
+                these_phase_durations[3] = this_trial_info['jitter_3']
+                these_phase_durations[5] = this_trial_info['jitter_5']
+                these_phase_durations[7] = trial_duration - np.sum(these_phase_durations[1:7])
+
                 # NB we stop the trial 0.5s before the start of the new trial, to allow sufficient computation time
-                # for preparing the next trial. Therefore 8.5s instead of 9s.
-                # these_phase_durations[3] = trial_duration - these_phase_durations[1] - these_phase_durations[2]
+                # for preparing the next trial.
 
                 this_trial = LearningTrial(ID=int(this_trial_info.trial_ID),
                                            parameters=this_trial_parameters,
@@ -277,20 +305,9 @@ class LearningSession(MRISession):
                 trial_handler.addData('response', this_trial.response['button'])
 
                 # absolute times since session start
-                trial_handler.addData('start_time', this_trial.start_time)
-                trial_handler.addData('t_time', this_trial.t_time)
-                trial_handler.addData('jitter_time', this_trial.jitter_time)
-                trial_handler.addData('stimulus_time', this_trial.stimulus_time)
-                trial_handler.addData('selection_time', this_trial.selection_time)
-                trial_handler.addData('feedback_time', this_trial.feedback_time)
-                trial_handler.addData('iti_time', this_trial.iti_time)
-
-                trial_handler.addData('phase_0_measured', this_trial.t_time - this_trial.start_time)
-                trial_handler.addData('phase_1_measured', this_trial.jitter_time - this_trial.t_time)
-                trial_handler.addData('phase_2_measured', this_trial.stimulus_time - this_trial.jitter_time)
-                trial_handler.addData('phase_3_measured', this_trial.selection_time - this_trial.stimulus_time)
-                trial_handler.addData('phase_4_measured', this_trial.feedback_time - this_trial.selection_time)
-                trial_handler.addData('phase_5_measured', this_trial.iti_time - this_trial.feedback_time)
+                for time_name in ['start_time', 't_time', 'jitter_time_1', 'cue_time', 'jitter_time_2',
+                                  'stimulus_time', 'selection_time', 'feedback_time', 'iti_time']:
+                    trial_handler.addData(time_name, getattr(this_trial, time_name))
 
                 # durations / time since actual start of the block. These are useful to create events-files later for
                 #  convolving. Can also grab these from the eventArray though.
@@ -330,8 +347,6 @@ class LearningSession(MRISession):
         self.close()
 
 
-
-
 if __name__ == '__main__':
     from psychopy import core
 
@@ -356,7 +371,7 @@ if __name__ == '__main__':
 
     # EMULATOR
     from psychopy.hardware.emulator import launchScan
-    scanner_emulator = launchScan(win=sess.screen, settings={'TR': 3, 'volumes': 30000, 'sync': 't'}, mode='Test')
+    scanner_emulator = launchScan(win=sess.screen, settings={'TR': 0.5, 'volumes': 30000, 'sync': 't'}, mode='Test')
 
     # run
     sess.run()

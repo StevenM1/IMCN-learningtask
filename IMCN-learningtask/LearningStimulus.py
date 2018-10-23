@@ -1,5 +1,5 @@
 from psychopy import visual
-
+from copy import copy
 
 class LearningStimulus(object):
     """ Something about the chosen stimuli. Japanese signs, a la Michael Frank? Or colors?
@@ -7,7 +7,7 @@ class LearningStimulus(object):
     For now, just colors
     """
 
-    def __init__(self, screen, width=0.5, height=0.5, colors=['red', 'yellow'], x_pos=(-1, 1), **kwargs):
+    def __init__(self, screen, set, stimulus_type='colors', x_pos=(-1, 1), **kwargs):
         self.screen = screen
         self.x_pos = x_pos
         self.x_pos_current = x_pos
@@ -17,16 +17,38 @@ class LearningStimulus(object):
             rect_line_width = kwargs['rect_line_width']
             kwargs.pop('rect_line_width')
 
-        self.stimuli = [
-            visual.Rect(self.screen, width=width, height=height, fillColor=colors[0], pos=(x_pos[0], 0), **kwargs),
-            visual.Rect(self.screen, width=width, height=height, fillColor=colors[1], pos=(x_pos[1], 0), **kwargs)
-        ]
+        if stimulus_type == 'colors':
+            kwargs.pop('text_height')
+            self.stimuli = [
+                visual.Rect(self.screen, fillColor=set[0], pos=(x_pos[0], 0), **kwargs),
+                visual.Rect(self.screen, fillColor=set[1], pos=(x_pos[1], 0), **kwargs)
+            ]
+        elif stimulus_type == 'agathodaimon':
+            kws = copy(kwargs)
+            kws.pop('height')
+            kws.pop('width')
+            height = kws['text_height']
+            kws.pop('text_height')
+            self.stimuli = [
+                visual.TextStim(self.screen, text=set[0], pos=(x_pos[0], 0), height=height,
+                                font='Agathodaimon',
+                                fontFiles=['./lib/AGATHODA.TTF'], **kws),
+                visual.TextStim(self.screen, text=set[1], pos=(x_pos[1], 0), height=height,
+                                font='Agathodaimon',
+                                fontFiles=['./lib/AGATHODA.TTF'], **kws)
+            ]
+
+        height = kwargs['height']
+        width = kwargs['width']
+        kwargs.pop('height')
+        kwargs.pop('width')
+        kwargs.pop('text_height')
 
         self.selection_rect = [
-            visual.Rect(self.screen, width=width+.5, height=height+.5, fillColor=None, pos=(x_pos[0], 0),
-                        lineWidth=rect_line_width, **kwargs),
-            visual.Rect(self.screen, width=width+.5, height=height+.5, fillColor=None, pos=(x_pos[1], 0),
-                        lineWidth=rect_line_width, **kwargs)
+            visual.Rect(self.screen, width=width+.5, height=height+.5, fillColor=None,
+                        pos=(x_pos[0], 0), lineWidth=rect_line_width, **kwargs),
+            visual.Rect(self.screen, width=width+.5, height=height+.5, fillColor=None,
+                        pos=(x_pos[1], 0), lineWidth=rect_line_width, **kwargs)
         ]
 
     def reverse_order(self):
