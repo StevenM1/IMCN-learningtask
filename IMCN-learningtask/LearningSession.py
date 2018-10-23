@@ -30,6 +30,8 @@ class LearningSession(MRISession):
             self.trial_duration = 8 - .5
         elif tr == 3:
             self.trial_duration = 9 - 0.5
+        elif tr == 0:
+            self.trial_duration = None
         if self.subject_initials == 'pilot':
             self.trial_duration = [8.5, 7.5, 8.5, 7.5]
 
@@ -53,12 +55,13 @@ class LearningSession(MRISession):
         self.screen.recordFrameIntervals = True
 
         # negative durations below are jittered and will be determined per trial (except phase 0)
+        # note that all these durations are default values and can and will be overwritten before each trial
         self.phase_durations = np.array([-0.0001,  # phase 0: wait for scan pulse
                                          -0.1,  # phase 1: fix cross
                                          1,     # phase 2: cue
                                          -0.1,  # phase 3: fix cross
                                          2,     # phase 4: stimulus
-                                         -0.1,  # phase 5: choice highlight
+                                         0.5,   # phase 5: choice highlight
                                          0.5,   # phase 6: feedback
                                          -.01   # phase 7: ITI
                                          ])
@@ -283,10 +286,14 @@ class LearningSession(MRISession):
                                          'cue': this_trial_info['cue']}
 
                 these_phase_durations = self.phase_durations.copy()
-                these_phase_durations[1] = this_trial_info['jitter_1']
-                these_phase_durations[3] = this_trial_info['jitter_3']
-                these_phase_durations[5] = this_trial_info['jitter_5']
-                these_phase_durations[7] = trial_duration - np.sum(these_phase_durations[1:7])
+                for phase_n in np.arange(8):
+                    if 'phase_' + str(phase_n) in this_trial_info.keys():
+                        these_phase_durations[phase_n] = this_trial_info['phase_' + str(phase_n)]
+                # these_phase_durations[1] = this_trial_info['jitter_1']
+                # these_phase_durations[3] = this_trial_info['jitter_3']
+                # these_phase_durations[5] = this_trial_info['jitter_5']
+                # if trial_duration is not None:
+                #     these_phase_durations[7] = trial_duration - np.sum(these_phase_durations[1:7])
 
                 # NB we stop the trial 0.5s before the start of the new trial, to allow sufficient computation time
                 # for preparing the next trial.
@@ -365,13 +372,13 @@ if __name__ == '__main__':
     # Set-up session
     sess = LearningSession('DEBUG',
                            1,
-                           tr=3,
+                           tr=0,
                            start_block=0,
                            config=config)
 
     # EMULATOR
-    from psychopy.hardware.emulator import launchScan
-    scanner_emulator = launchScan(win=sess.screen, settings={'TR': 0.5, 'volumes': 30000, 'sync': 't'}, mode='Test')
+    # from psychopy.hardware.emulator import launchScan
+    # scanner_emulator = launchScan(win=sess.screen, settings={'TR': 0.5, 'volumes': 30000, 'sync': 't'}, mode='Test')
 
     # run
     sess.run()

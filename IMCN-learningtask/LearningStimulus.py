@@ -1,6 +1,7 @@
 from psychopy import visual
 from copy import copy
 
+
 class LearningStimulus(object):
     """ Something about the chosen stimuli. Japanese signs, a la Michael Frank? Or colors?
 
@@ -52,8 +53,10 @@ class LearningStimulus(object):
         ]
 
     def reverse_order(self):
-        # on half of all trials, we want to 'reverse' the presentation order of the stimuli to prevent any left/right
-        #  biases
+        """
+        on half of all trials, we want to 'reverse' the presentation order of the stimuli to prevent any left/right
+        biases
+        """
 
         self.x_pos_corrent = self.x_pos[1], self.x_pos[0]
 

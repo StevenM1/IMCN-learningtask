@@ -13,6 +13,7 @@ class LearningTrial(MRITrial):
                                             screen=screen,
                                             tracker=tracker)
 
+        print(phase_durations)
         self.trs_recorded = 0
         self.ID = ID
         self.parameters = parameters
@@ -39,8 +40,10 @@ class LearningTrial(MRITrial):
         # Select cue
         if parameters['cue'] == 'SPD':
             self.current_cue = self.session.cues[0]
-        else:
+        elif parameters['cue'] == 'ACC':
             self.current_cue = self.session.cues[1]
+        else:
+            self.current_cue = None
 
         # initialize times
         self.t_time = self.jitter_time_1 = self.cue_time = self.jitter_time_2 = self.stimulus_time = \
@@ -98,6 +101,10 @@ class LearningTrial(MRITrial):
                         if not self.response_measured:
                             self.response_measured = True
                             self.process_response(ev, time)
+
+                            # Not in the MR scanner? End phase upon keypress
+                            if self.session.tr == 0:
+                                self.phase_forward()
 
             super(LearningTrial, self).key_event(ev)
 
@@ -157,7 +164,7 @@ class LearningTrial(MRITrial):
             # Waits for scanner pulse.
             if self.phase == 0:
                 self.t_time = self.session.clock.getTime()
-                if not isinstance(self.session, MRISession):
+                if not isinstance(self.session, MRISession) or self.session.tr == 0:
                     self.phase_forward()
 
             # In phase 1, we show fix cross (jittered timing)
@@ -216,11 +223,12 @@ class LearningTrial(MRITrial):
         phase = self.phase
         time = self.session.clock.getTime()
         trial_start_time = self.start_time
+        t_start = time - trial_start_time
         stim = self.parameters['stimulus_set']
         ps = self.parameters['p_win']
 
-        debug_str = 'Trial: %d\nPhase: %d\nTime: %.3fs\nTrial start time: %.3fs\nStim set: %s\nPs: [%.1f, %.1f]' %(
-        trial, phase, time, trial_start_time, stim, ps[0], ps[1])
+        debug_str = 'Trial: %d\nPhase: %d\nTime since start: %.3fs\nTrial start time: %.3fs\nTime since trial start: %.3fs\nStim set: %s\nPs: [%.1f, %.1f]' %(
+        trial, phase, time, trial_start_time, t_start, stim, ps[0], ps[1])
         resp_str = "\n".join(("{}: {}".format(*i) for i in self.response.items()))
         debug_str = debug_str + '\n' + resp_str
         self.session.debug_txt.text = debug_str
