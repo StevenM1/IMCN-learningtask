@@ -119,3 +119,9 @@ designs/
 *.DS_Store
 .DS_store
 */.DS_store
+
+IMCN-learningtask/screenshots/*.png
+IMCN-learningtask/screenshots/*.pdf
+IMCN-learningtask/screenshots/*.indd
+
+scratch.ipynb
