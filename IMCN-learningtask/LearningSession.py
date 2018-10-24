@@ -1,6 +1,5 @@
 from exptools.core.session import MRISession
-from LearningStimulus import LearningStimulus, FixationCross
-from LearningTrial import LearningTrial, EndOfBlockTrial
+from LearningTrial import LearningTrial, EndOfBlockTrial, InstructionTrial
 from LearningStimulus import LearningStimulus, FixationCross
 from psychopy import visual, data
 import datetime
@@ -25,15 +24,6 @@ class LearningSession(MRISession):
         self.config = config
         self.start_block = start_block  # allows for starting at a later block than 1
         self.warmup_trs = config.get('mri', 'warmup_trs')
-
-        if tr == 2:
-            self.trial_duration = 8 - 0.5
-        elif tr == 3:
-            self.trial_duration = 9 - 0.5
-        elif tr == 0:
-            self.trial_duration = None
-        if self.subject_initials == 'pilot':
-            self.trial_duration = [8.5, 7.5, 8.5, 7.5]
 
         self.response_button_signs = [config.get('input', 'response_button_left'),
                                       config.get('input', 'response_button_right')]
@@ -65,7 +55,9 @@ class LearningSession(MRISession):
                                          0.5,   # phase 6: feedback
                                          -.01   # phase 7: ITI
                                          ])
-
+        self.total_points = 0
+        self.total_trials = 0
+        self.instruction_trial_n = -1
         self.load_design()
         self.prepare_objects()
 
@@ -73,6 +65,37 @@ class LearningSession(MRISession):
 
         fn = 'sub-' + str(self.subject_initials).zfill(2) + '_tr-2_design'
         self.design = pd.read_csv(os.path.join('designs', fn + '.csv'), sep='\t', index_col=False)
+
+    def update_instruction_screen(self, task='SAT', block=0, experiment_start=False):
+        """
+        Updates instruction screen based on upcoming block
+        :param task: ['SAT', 'vanilla']
+        :param block: [0, 1, 2]
+        :param experiment_start: bool  (is this the start of the experiment? If true, shows welcome screen)
+        """
+
+        if experiment_start:
+            self.current_instruction_screen = [
+                visual.TextStim(win=self.screen, text='Welcome to this experiment!',
+                                height=self.config.get('text', 'height'),
+                                units=self.config.get('text', 'units'),
+                                pos=(0, 2)),
+                visual.TextStim(win=self.screen, text='Press <space bar> to continue',
+                                height=self.config.get('text', 'height'),
+                                units=self.config.get('text', 'units'),
+                                pos=(0, -2))
+            ]
+        elif block == 1 or block == 4:
+            if task == 'SAT':
+                # prep screen here
+                self.current_instruction_screen = [
+                    self.instruction_screens[1]
+                ]
+            elif task == 'vanilla':
+                self.current_instruction_screen = [
+                    self.instruction_screens[0]
+                ]
+
 
     def prepare_objects(self):
         """
@@ -116,49 +139,56 @@ class LearningSession(MRISession):
                                  x_pos=config.get('stimulus', 'x_pos'),
                                  rect_line_width=config.get('stimulus', 'rect_line_width')))
 
-        # load txts for feedback
-        this_file = os.path.dirname(os.path.abspath(__file__))
-        self.language = 'en'
-        with open(os.path.join(this_file, 'instructions', self.language, 'feedback.txt'), 'rb') as f:
-            self.feedback_txt = f.read().split('\n\n\n')
+        # load instruction screen pdfs
+        self.instruction_screens = [
+            visual.ImageStim(self.screen, image='./lib/vanilla.png'),
+            visual.ImageStim(self.screen, image='./lib/sat.png')
+        ]
+
+        # # load txts for feedback
+        # this_file = os.path.dirname(os.path.abspath(__file__))
+        # self.language = 'en'
+        # with open(os.path.join(this_file, 'instructions', self.language, 'feedback.txt'), 'rb') as f:
+        #     self.feedback_txt = f.read().split('\n\n\n')
 
         # Prepare feedback stimuli. Rendering of text is supposedly slow so better to do this once only (not every
         # trial)
-        self.feedback_text_objects = [
-            # 0 = Too slow, no choice
-            visual.TextStim(win=self.screen, text=self.feedback_txt[0], color='darkred',
+        # 1. Feedback on outcomes
+        self.feedback_outcome_objects = [
+            visual.TextStim(win=self.screen, text='Outcome: 0',  color='darkred',
                             units=config.get('text', 'units'),
-                            height=config.get('text', 'height')),
-
-            # 1 = Too slow, win
-            visual.TextStim(win=self.screen, text=self.feedback_txt[1], color='darkred',
+                            height=config.get('text', 'height'),
+                            pos=(0, config.get('text', 'feedback_y_pos')[0])),
+            visual.TextStim(win=self.screen, text='Outcome: +100', color='darkgreen',
                             units=config.get('text', 'units'),
-                            height=config.get('text', 'height')),
-
-            # 2 = Too slow, no win
-            visual.TextStim(win=self.screen, text=self.feedback_txt[2], color='darkred',
+                            height=config.get('text', 'height'),
+                            pos=(0, config.get('text', 'feedback_y_pos')[0])),
+            visual.TextStim(win=self.screen, text='No choice made', color='darkred',
                             units=config.get('text', 'units'),
-                            height=config.get('text', 'height')),
-
-            # 3 = Too fast, win
-            visual.TextStim(win=self.screen, text=self.feedback_txt[3], color='darkred',
+                            height=config.get('text', 'height'),
+                            pos=(0, config.get('text', 'feedback_y_pos')[0]))
+        ]
+        # 2. Feedback on earnings
+        self.feedback_earnings_objects = [
+            visual.TextStim(win=self.screen, text='Reward: 0', color='darkred',
                             units=config.get('text', 'units'),
-                            height=config.get('text', 'height')),
-
-            # 4 = Too fast, no win
-            visual.TextStim(win=self.screen, text=self.feedback_txt[4], color='darkred',
+                            height=config.get('text', 'height'),
+                            pos = (0, config.get('text', 'feedback_y_pos')[1])),
+            visual.TextStim(win=self.screen, text='Reward: +100', color='darkgreen',
                             units=config.get('text', 'units'),
-                            height=config.get('text', 'height')),
-
-            # 5 = In time, win
-            visual.TextStim(win=self.screen, text=self.feedback_txt[5], color='darkgreen',
+                            height=config.get('text', 'height'),
+                            pos=(0, config.get('text', 'feedback_y_pos')[1])),
+        ]
+        # 3. Feedback on timing
+        self.feedback_timing_objects = [
+            visual.TextStim(win=self.screen, text='Too slow!', color='darkred',
                             units=config.get('text', 'units'),
-                            height=config.get('text', 'height')),
-
-            # 6 = In time, no win
-            visual.TextStim(win=self.screen, text=self.feedback_txt[6], color='darkred',
+                            height=config.get('text', 'height'),
+                            pos=(0, config.get('text', 'feedback_y_pos')[2])),
+            visual.TextStim(win=self.screen, text='Too fast!', color='darkred',
                             units=config.get('text', 'units'),
-                            height=config.get('text', 'height')),
+                            height=config.get('text', 'height'),
+                            pos=(0, config.get('text', 'feedback_y_pos')[2])),
         ]
 
         # Prepare cue texts. Rendering of text is supposedly slow so better to do this once only (not every
@@ -194,7 +224,6 @@ class LearningSession(MRISession):
                                               pos=pos,
                                               height=14,  # config.get('text', 'height'),
                                               alignHoriz='center')
-
 
     def save_data(self, trial_handler=None, block_n='all'):
 
@@ -245,31 +274,34 @@ class LearningSession(MRISession):
 
 
     def run(self):
-        """ Runs this Stop Signal task"""
+        """ Runs this Instrumental Learning task"""
+        # start by showing welcome screen, but only if the experiment is started from block 0
+        if self.start_block == 0:
+            self.update_instruction_screen(block=0, experiment_start=True)
+            _ = InstructionTrial(ID=self.instruction_trial_n,
+                                 parameters={},
+                                 phase_durations=[0.5, 1000],
+                                 session=self,
+                                 screen=self.screen).run()
 
-        self.block_start_time = 0
+            self.instruction_trial_n -= 1
 
-        # start emulator TODO REMOVE THIS STUFF!!
-        # n_vols = [343+2, 513+2, 343+2, 513+2]
-        # trs = [3, 2, 3, 2]
-        # n_vols = [31+2, 21+2]
-        # trs = [3, 2]
-        # from psychopy.hardware.emulator import launchScan
+        # # Set start time of block 0 to 0
+        # self.block_start_time = 0
 
         for block_n in np.unique(self.design.block):
             if block_n < self.start_block:
                 continue
             this_block_design = self.design.loc[self.design.block == block_n]
 
-            # scanner_emulator = launchScan(win=self.screen, settings={'TR': trs[block_n-1],
-            #                                                          'volumes': n_vols[block_n-1],
-            #                                                          'sync': 't'},
-            #                               mode='Test')
-
-            if isinstance(self.trial_duration, list):
-                trial_duration = self.trial_duration[block_n-1]
-            else:
-                trial_duration = self.trial_duration
+            if block_n in [1, 4]:
+                self.update_instruction_screen(block=block_n, experiment_start=False)
+                _ = InstructionTrial(ID=self.instruction_trial_n,
+                                     parameters={},
+                                     phase_durations=[0.5, 1000],
+                                     session=self,
+                                     screen=self.screen).run()
+                self.instruction_trial_n -= 1
 
             trial_handler = data.TrialHandler(this_block_design.to_dict('records'),
                                               nReps=1,
@@ -306,6 +338,13 @@ class LearningSession(MRISession):
                 # Record some stuff
                 trial_handler.addData('rt', this_trial.response['rt'])
                 trial_handler.addData('response', this_trial.response['button'])
+                trial_handler.addData('deadline', this_trial.deadline)
+
+                trial_handler.addData('points_earned', this_trial.points_earned)
+                trial_handler.addData('outcome', this_trial.won)
+                self.total_points += this_trial.points_earned
+                self.total_trials += 1
+                trial_handler.addData('total_points_earned', self.total_points)
 
                 # absolute times since session start
                 for time_name in ['start_time', 't_time', 'jitter_time_1', 'cue_time', 'jitter_time_2',

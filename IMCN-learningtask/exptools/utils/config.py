@@ -27,7 +27,8 @@ list_vars = [('screen', 'physical_screen_size'),
              ('stimulus', 'set_2'),
              ('stimulus', 'set_3'),
              ('stimulus', 'x_pos'),
-             ('fixation_cross', 'bg')]
+             ('fixation_cross', 'bg'),
+             ('text', 'feedback_y_pos')]
 
 boolean_vars = [('screen', 'wait_blanking'),
                 ('screen', 'full_screen'),

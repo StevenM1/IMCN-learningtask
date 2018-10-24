@@ -1,5 +1,5 @@
 
-from StopSignal import *
+from LearningSession import *
 from psychopy import core
 
 # Kill all background processes (macOS only)
@@ -41,10 +41,10 @@ def main():
     my_monitor.saveMon()
 
     initials = raw_input('Your initials/subject number: ')
-    if initials == 'pilot' or initials == 'practice':
-        session_tr = 2
-    else:
-        session_tr = int(raw_input('Session TR: '))
+    # if initials == 'pilot' or initials == 'practice':
+    #     session_tr = 2
+    # else:
+    #     session_tr = int(raw_input('Session TR: '))
 
     if initials == 'practice':
         start_block = 1
@@ -52,21 +52,22 @@ def main():
     else:
         start_block = int(raw_input('At which block do you want to start? NB: 1 is the first block! '))
         if start_block > 1:
-            # check if previous stairs exist
+            # ToDo check if previous file with total points exist
             now = datetime.datetime.now()
             opfn = now.strftime("%Y-%m-%d")
-            expected_filename = initials + '_' + str(session_tr) + '_' + opfn
-            fns = glob.glob('./data/' + expected_filename + '_*_staircases.pkl')
-            fns.sort()
-            if len(fns) == 0:
-                raw_input('Could not find previous stairs for this subject today... Enter any key to verify you want '
-                          'to make new staircases. ')
-            elif len(fns) == 1:
-                print('Found previous staircase file: %s' % fns[0])
-            elif len(fns) > 1:
-                print('Found multiple staircase files. Please remove the unwanted ones, otherwise I cannot run.')
-                print(fns)
-                core.quit()
+            # ToDo
+            # expected_filename = initials + '_' + str(session_tr) + '_' + opfn
+            # fns = glob.glob('./data/' + expected_filename + '_*_staircases.pkl')
+            # fns.sort()
+            # if len(fns) == 0:
+            #     raw_input('Could not find previous stairs for this subject today... Enter any key to verify you want '
+            #               'to make new staircases. ')
+            # elif len(fns) == 1:
+            #     print('Found previous staircase file: %s' % fns[0])
+            # elif len(fns) > 1:
+            #     print('Found multiple staircase files. Please remove the unwanted ones, otherwise I cannot run.')
+            #     print(fns)
+            #     core.quit()
 
         scanner = ''
         simulate = ''
@@ -75,14 +76,18 @@ def main():
             if scanner not in ['y', 'n']:
                 print('I don''t understand that. Please enter ''y'' or ''n''.')
 
+        simulate = False
         if scanner == 'n':
             while simulate not in ['y', 'n']:
                 simulate = raw_input('Do you want to simulate scan pulses? This is useful during behavioral pilots (y/n): ')
                 if simulate not in ['y', 'n']:
                     print('I don''t understand that. Please enter ''y'' or ''n''.')
 
-    sess = StopSignalSession(subject_initials=initials, index_number=session_tr, tr=session_tr, start_block=start_block,
-                             config=config)
+        if scanner == 'y' or simulate == 'y':
+            tr = float(raw_input('What is the TR?: '))
+
+    sess = LearningSession(subject_initials=initials, index_number=tr, tr=tr, start_block=start_block,
+                           config=config)
 
     if simulate == 'y':
         # Run with simulated scanner (useful for behavioral pilots with eye-tracking)
