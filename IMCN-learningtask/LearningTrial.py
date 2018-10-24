@@ -4,6 +4,23 @@ from psychopy import event, visual
 import numpy as np
 import os
 
+#
+# def estimate_bonus(n_points, n_trials):
+#     """
+#     simple linear combination
+#     y = a*x + b
+#     a = 10/max_points
+#     b = -10/2
+#     """
+#
+#     # expected n points if *always* chosen the right answer
+#     max_points = n_trials * np.mean([.8, .7, .65]) * 100.
+#
+#     n_moneys = n_points*(10./max_points) - 10/2.
+#     n_moneys_capped = np.min([np.max([n_moneys, 0]), 5]) # cap at [0, 5]
+#
+#     return n_moneys_capped
+
 
 class LearningTrial(MRITrial):
 
@@ -293,7 +310,6 @@ class LearningTrial(MRITrial):
             for fb in self.current_feedback:
                 fb.draw()
 
-            print(len(self.current_feedback))
             if len(self.current_feedback) < 3:
                 self.session.fixation_cross.draw()
 
@@ -319,23 +335,23 @@ class EndOfBlockTrial(MRITrial):
         self.t_time = self.jitter_time = self.stimulus_time = self.iti_time = None
 
         # guestimate the amount of money to be earned
-        max_points = self.session.total_trials * np.mean([.8, .7, .65]) * 100
-        percentage = self.session.total_points/max_points
-        estimated_moneys = np.max([0, (percentage-.5) * 5])  # max 5 euros, min 0
+        estimated_moneys = self.session.estimate_bonus()
+        end_str = '!' if estimated_moneys > 0 else ''
 
         self.stim = [
             visual.TextStim(screen, pos=(0, 4),
                             units=self.session.config.get('text', 'units'),
                             height=self.session.config.get('text', 'height'),
-                            text='End of block. So far, you earned %d points!' %self.session.total_points),
+                            text='End of block. So far, you earned %d points!' % self.session.total_points),
             visual.TextStim(screen, pos=(0, 0),
                             units=self.session.config.get('text', 'units'),
                             height=self.session.config.get('text', 'height'),
-                            text='Based on your performance so far, it looks like you will receive a bonus of approximately %2.f euros.!' % estimated_moneys),
+                            text='Based on your performance so far, it looks like you will receive a bonus of approximately %.2f euro%s' % (estimated_moneys, end_str)),
             visual.TextStim(screen, pos=(0, -4),
                             units=self.session.config.get('text', 'units'),
                             height=self.session.config.get('text', 'height'),
-                            text='You can take a short break now. Press <space bar> to continue.' %self.session.total_points)
+                            text='You can take a short break now. Press <space bar> to continue.' %
+                                 self.session.total_points)
         ]
 
     def event(self):
@@ -361,6 +377,11 @@ class EndOfBlockTrial(MRITrial):
 
                 elif ev in self.session.response_button_signs:
                     self.events.append([ev, time, self.session.clock.getTime() - self.start_time, 'key_press'])
+
+                elif ev in ['space']:
+                    self.events.append([ev, time, self.session.clock.getTime() - self.start_time, 'key_press'])
+                    if self.phase == 1:
+                        self.stopped = True
 
             super(EndOfBlockTrial, self).key_event(ev)
 

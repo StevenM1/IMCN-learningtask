@@ -59,12 +59,32 @@ class LearningSession(MRISession):
         self.total_trials = 0
         self.instruction_trial_n = -1
         self.load_design()
-        self.prepare_objects()
+        self.prepare_objects(counterbalance=True)
 
     def load_design(self):
 
-        fn = 'sub-' + str(self.subject_initials).zfill(2) + '_tr-2_design'
+        if self.subject_initials == 'DEBUG':
+            fn = 'sub-' + str(self.subject_initials).zfill(2) + '_design'
+        else:
+            fn = 'sub-' + str(self.index_number).zfill(2) + '_design'
+
         self.design = pd.read_csv(os.path.join('designs', fn + '.csv'), sep='\t', index_col=False)
+        self.p_wins = self.design.p_win_correct.unique()
+
+    def estimate_bonus(self):
+        """
+        simple linear combination
+        y = a*x + b
+        a = 10/max_points
+        b = -10/2
+        """
+
+        # expected n points if *always* chosen the right answer
+        max_points = self.total_trials * np.mean(self.p_wins) * 100.
+        n_moneys = self.total_points * (10. / max_points) - 10 / 2.
+        n_moneys_capped = np.min([np.max([n_moneys, 0]), 5])  # cap at [0, 5]
+
+        return n_moneys_capped
 
     def update_instruction_screen(self, task='SAT', block=0, experiment_start=False):
         """
@@ -96,8 +116,76 @@ class LearningSession(MRISession):
                     self.instruction_screens[0]
                 ]
 
+    def counterbalance_stimuli(self, all_sets):
+        """
+        For counterbalancing: determine 'order' of the provided stimulus set. That is, we want to make sure that a
+        specific character has varying probabilities of 'winning' over participants. E.g., assuming your stimuli are
+        ABCDEFGHIJKL, and you want ABCDEF and GHIJKL never to intermix, you may want this:
 
-    def prepare_objects(self):
+pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8    stim_9    stim_10    stim_11    stim_12
+--  ----  --------  --------  --------  --------  --------  --------  --------  --------  --------  ---------  ---------  ---------
+ 0     1  A         B         C         D         E         F         G         H         I         J          K          L
+ 1     2  B         A         D         C         F         E         H         G         J         I          L          K
+ 2     3  C         D         E         F         A         B         I         J         K         L          G          H
+ 3     4  D         C         F         E         B         A         J         I         L         K          H          G
+ 4     5  E         F         A         B         C         D         K         L         G         H          I          J
+ 5     6  F         E         B         A         D         C         L         K         H         G          J          I
+ 6     7  G         H         I         J         K         L         A         B         C         D          E          F
+ 7     8  H         G         J         I         L         K         B         A         D         C          F          E
+ 8     9  I         J         K         L         G         H         C         D         E         F          A          B
+ 9    10  J         I         L         K         H         G         D         C         F         E          B          A
+10    11  K         L         G         H         I         J         E         F         A         B          C          D
+11    12  L         K         H         G         J         I         F         E         B         A          D          C
+        """
+        import itertools
+        from copy import deepcopy
+
+        n_shifts = [0, 1, 2]  # assuming 6 stimuli, but you could do more, or less...
+        rev_inner = [False, True]
+        switch_sets = [False, True]
+
+        cb_df = pd.DataFrame(list(itertools.product(switch_sets, n_shifts, rev_inner)),
+                             columns=['switch_sets', 'n_shifts', 'rev_inner'])
+        cb_df['pp'] = np.arange(1, cb_df.shape[0] + 1)
+        for set_n in range(1, 13):
+            cb_df['stim_%d' % set_n] = None
+
+        for pp in cb_df['pp']:
+            idx = cb_df.pp == pp
+            switch_sets = cb_df.loc[idx, 'switch_sets'].iloc[0]
+            reverse_inner = cb_df.loc[idx, 'rev_inner'].iloc[0]
+            n_shifts = cb_df.loc[idx, 'n_shifts'].iloc[0]
+
+            if switch_sets:
+                sets = deepcopy([all_sets[3:], all_sets[:3]])
+            else:
+                sets = deepcopy([all_sets[:3], all_sets[3:]])
+
+            sets_allocated = 0
+            for set_n, set_ in enumerate(sets):
+                for i in range(n_shifts):
+                    set_.insert(len(set_), set_.pop(0))  # move first item to last place
+
+                if reverse_inner:
+                    set_ = [x[::-1] for x in set_]  # reverse inner order
+
+                # print('pp %d, %d, %s' % (pp, set_n, set_))
+                #### NB: you could just use set_ as a final result; the placing in the dataframe and then reverting
+                # back to a nested list is definitely not necessary but may help clarify what's going on here...
+                for to_allocate in [0, 1, 2]:
+                    for to_allocate_i in [0, 1]:
+                        cb_df.loc[idx, 'stim_%d' % (sets_allocated + 1)] = set_[to_allocate][to_allocate_i]
+                        sets_allocated += 1
+
+        pp_zero_based = self.index_number - 1
+        row_iloc = int(pp_zero_based - np.floor(pp_zero_based / 12) * 12)
+        colnames = cb_df.columns
+        stim_list = cb_df.iloc[row_iloc][[x for x in colnames if 'stim' in x]].values.tolist()
+        stim_nested_list = [[stim_list[0 + y * 2], stim_list[1 + y * 2]] for y in range(6)]
+        print('Stimuli/set order for this pp: %s' %stim_nested_list)
+        return stim_nested_list
+
+    def prepare_objects(self, counterbalance=True):
         """
         Prepares all visual objects (instruction/feedback texts, stimuli)
 
@@ -122,11 +210,20 @@ class LearningSession(MRISession):
                         raise(IOError('I dont understand color %s that was provided to stimulus set %s...' %(col,
                                                                                                              set)))
 
+        # load all possible stimuli
+        all_stim = []
+        for set_n in range(10):
+            # assume a maximum of 10 sets, bit arbitrary but seems enough
+            if config.has_option('stimulus', 'set_%d' % set_n):
+                all_stim.append(config.get('stimulus', 'set_%d' % set_n))
+
+        if counterbalance:
+            # counterbalance, based on index_num
+            ###### WARNING: This is set-up to be specific for my experiment #######
+            all_stim = self.counterbalance_stimuli(all_stim)
+
         # Stimuli
         self.stimuli = []
-        all_stim = [config.get('stimulus', 'set_1'),
-                    config.get('stimulus', 'set_2'),
-                    config.get('stimulus', 'set_3')]
         for stim in all_stim:
             self.stimuli.append(
                 LearningStimulus(self.screen,
@@ -144,12 +241,6 @@ class LearningSession(MRISession):
             visual.ImageStim(self.screen, image='./lib/vanilla.png'),
             visual.ImageStim(self.screen, image='./lib/sat.png')
         ]
-
-        # # load txts for feedback
-        # this_file = os.path.dirname(os.path.abspath(__file__))
-        # self.language = 'en'
-        # with open(os.path.join(this_file, 'instructions', self.language, 'feedback.txt'), 'rb') as f:
-        #     self.feedback_txt = f.read().split('\n\n\n')
 
         # Prepare feedback stimuli. Rendering of text is supposedly slow so better to do this once only (not every
         # trial)
@@ -286,7 +377,8 @@ class LearningSession(MRISession):
 
             self.instruction_trial_n -= 1
 
-        # # Set start time of block 0 to 0
+        # # Set start time of block 0 to 0 (useful if you want to calculate durations on the fly, otherwise not so
+        # important
         # self.block_start_time = 0
 
         for block_n in np.unique(self.design.block):
@@ -294,20 +386,24 @@ class LearningSession(MRISession):
                 continue
             this_block_design = self.design.loc[self.design.block == block_n]
 
-            if block_n in [1, 4]:
-                self.update_instruction_screen(block=block_n, experiment_start=False)
-                _ = InstructionTrial(ID=self.instruction_trial_n,
-                                     parameters={},
-                                     phase_durations=[0.5, 1000],
-                                     session=self,
-                                     screen=self.screen).run()
-                self.instruction_trial_n -= 1
-
             trial_handler = data.TrialHandler(this_block_design.to_dict('records'),
                                               nReps=1,
                                               method='sequential')
 
             for block_trial_ID, this_trial_info in enumerate(trial_handler):
+
+                # show instruction screen (do this in inner loop so we can peek into the next cue)
+                if block_n in [1, 4] and block_trial_ID == 0:
+                    if this_trial_info['cue'] in ['SPD', 'ACC']:
+                        self.update_instruction_screen(block=block_n, task='SAT', experiment_start=False)
+                    else:
+                        self.update_instruction_screen(block=block_n, task='vanilla', experiment_start=False)
+                    _ = InstructionTrial(ID=self.instruction_trial_n,
+                                         parameters={},
+                                         phase_durations=[0.5, 1000],
+                                         session=self,
+                                         screen=self.screen).run()
+                    self.instruction_trial_n -= 1
 
                 this_trial_parameters = {'stimulus_set': int(this_trial_info['stimulus_set']),
                                          'correct_stim_lr': bool(this_trial_info['correct_stim_lr']),

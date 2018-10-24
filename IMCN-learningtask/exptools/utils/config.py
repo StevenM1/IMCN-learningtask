@@ -23,9 +23,16 @@ list_vars = [('screen', 'physical_screen_size'),
              ('screen', 'background_color'),
              ('screen', 'size'),
              ('screen', 'max_lums'),
-             ('stimulus', 'set_1'),
+             ('stimulus', 'set_1'),  # hardcoded and terribly ugly. sorry.
              ('stimulus', 'set_2'),
              ('stimulus', 'set_3'),
+             ('stimulus', 'set_4'),
+             ('stimulus', 'set_5'),
+             ('stimulus', 'set_6'),
+             ('stimulus', 'set_7'),
+             ('stimulus', 'set_8'),
+             ('stimulus', 'set_9'),
+             ('stimulus', 'set_10'),
              ('stimulus', 'x_pos'),
              ('fixation_cross', 'bg'),
              ('text', 'feedback_y_pos')]
@@ -79,7 +86,9 @@ class ExpToolsConfig(object):
 
         return self._config.set(section, option, value)
 
+    def has_option(self, section, option):
 
+        return self._config.has_option(section, option)
 
 def test_exptools_config():
     config = ExpToolsConfig()

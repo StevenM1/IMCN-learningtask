@@ -40,7 +40,10 @@ def main():
     my_monitor.setDistance(config.get('screen', 'physical_screen_distance'))
     my_monitor.saveMon()
 
+    tr = 0
+
     initials = raw_input('Your initials/subject number: ')
+    index_num = int(raw_input('What is the pp num? [integer or I will crash]: '))
     # if initials == 'pilot' or initials == 'practice':
     #     session_tr = 2
     # else:
@@ -76,7 +79,6 @@ def main():
             if scanner not in ['y', 'n']:
                 print('I don''t understand that. Please enter ''y'' or ''n''.')
 
-        simulate = False
         if scanner == 'n':
             while simulate not in ['y', 'n']:
                 simulate = raw_input('Do you want to simulate scan pulses? This is useful during behavioral pilots (y/n): ')
@@ -86,13 +88,13 @@ def main():
         if scanner == 'y' or simulate == 'y':
             tr = float(raw_input('What is the TR?: '))
 
-    sess = LearningSession(subject_initials=initials, index_number=tr, tr=tr, start_block=start_block,
+    sess = LearningSession(subject_initials=initials, index_number=index_num, tr=tr, start_block=start_block,
                            config=config)
 
     if simulate == 'y':
         # Run with simulated scanner (useful for behavioral pilots with eye-tracking)
         from psychopy.hardware.emulator import launchScan
-        scanner_emulator = launchScan(win=sess.screen, settings={'TR': session_tr, 'volumes': 30000, 'sync': 't'},
+        scanner_emulator = launchScan(win=sess.screen, settings={'TR': tr, 'volumes': 30000, 'sync': 't'},
                                       mode='Test')
     sess.run()
 
