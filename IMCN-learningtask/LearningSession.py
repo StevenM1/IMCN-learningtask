@@ -182,7 +182,7 @@ pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8
         colnames = cb_df.columns
         stim_list = cb_df.iloc[row_iloc][[x for x in colnames if 'stim' in x]].values.tolist()
         stim_nested_list = [[stim_list[0 + y * 2], stim_list[1 + y * 2]] for y in range(6)]
-        print('Stimuli/set order for this pp: %s' %stim_nested_list)
+        print('Stimuli/set order for this pp: %s' % stim_nested_list)
         return stim_nested_list
 
     def prepare_objects(self, counterbalance=True):
