@@ -1,5 +1,5 @@
 from exptools.core.session import MRISession
-from LearningTrial import LearningTrial, EndOfBlockTrial, InstructionTrial
+from LearningTrial import LearningTrial, EndOfBlockTrial, InstructionTrial, PracticeTrial
 from LearningStimulus import LearningStimulus, FixationCross
 from psychopy import visual, data
 import datetime
@@ -24,6 +24,7 @@ class LearningSession(MRISession):
         self.config = config
         self.start_block = start_block  # allows for starting at a later block than 1
         self.warmup_trs = config.get('mri', 'warmup_trs')
+        self.restart_block = False
 
         self.response_button_signs = [config.get('input', 'response_button_left'),
                                       config.get('input', 'response_button_right')]
@@ -63,13 +64,21 @@ class LearningSession(MRISession):
 
     def load_design(self):
 
-        if self.subject_initials == 'DEBUG':
+        if self.subject_initials == 'DEBUG' or self.subject_initials=='PRACTICE':
             fn = 'sub-' + str(self.subject_initials).zfill(2) + '_design'
         else:
             fn = 'sub-' + str(self.index_number).zfill(2) + '_design'
 
         self.design = pd.read_csv(os.path.join('designs', fn + '.csv'), sep='\t', index_col=False)
         self.p_wins = self.design.p_win_correct.unique()
+
+        # For practice sessions, we want to annotate some stuff but only in the first three trials per block (?)
+        self.design['annotate'] = False
+        if self.subject_initials == 'PRACTICE':
+            for block in self.design.block.unique():
+                idx = self.design.block == block
+                idx = (np.cumsum(idx) > 0) & (np.cumsum(idx) < 2)  # run only the first trial annotated
+                self.design.loc[idx, 'annotate'] = True
 
     def estimate_bonus(self):
         """
@@ -107,14 +116,34 @@ class LearningSession(MRISession):
             ]
         elif block == 1 or block == 4:
             if task == 'SAT':
-                # prep screen here
-                self.current_instruction_screen = [
-                    self.instruction_screens[1]
-                ]
+                if self.subject_initials == 'PRACTICE':
+                    self.current_instruction_screen = [
+                        visual.TextStim(self.screen,
+                                        text='You will now practice the task with speed/accuracy cues. We will '
+                                             'again illustrate how each trial works.\n\nPress <space bar> to start',
+                                        height=self.config.get('text', 'height'),
+                                        units=self.config.get('text', 'units'),
+                                        pos=(0, -2)
+                                        )]
+                else:
+                    # prep screen here
+                    self.current_instruction_screen = [
+                        self.instruction_screens[1]
+                    ]
             elif task == 'vanilla':
-                self.current_instruction_screen = [
-                    self.instruction_screens[0]
-                ]
+                if self.subject_initials == 'PRACTICE':
+                    self.current_instruction_screen = [
+                        visual.TextStim(self.screen,
+                                        text='You will first practice the task without any speed/accuracy cues. We will '
+                                             'first illustrate how each trial works.\n\nPress <space bar> to start',
+                                        height=self.config.get('text', 'height'),
+                                        units=self.config.get('text', 'units'),
+                                        pos=(0, -2)
+                                        )]
+                else:
+                    self.current_instruction_screen = [
+                        self.instruction_screens[0]
+                    ]
 
     def counterbalance_stimuli(self, all_sets):
         """
@@ -363,6 +392,26 @@ pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8
         self.save_data()
         super(LearningSession, self).close()
 
+    def run_trial(self, ID, parameters, phase_durations, session, screen, annotate=False):
+
+        if annotate:
+            # adjust trial parameters to allow for annotation phases
+            phase_2 = np.Inf if parameters['cue'] in ['spd', 'acc'] else -0.001
+            phase_durations = np.array([-0.0001,   # phase 0: wait for scan pulse
+                                        -0.1,     # phase 1: fix cross
+                                        phase_2,   # phase 2: cue
+                                        -0.1,     # phase 3: fix cross
+                                        np.Inf,   # phase 4: stimulus
+                                        np.Inf,   # phase 5: choice highlight
+                                        np.Inf,   # phase 6: feedback, highlight 1 (self-paced)
+                                        np.Inf,   # phase 7: feedback, highlight 2 (self-paced)
+                                        np.Inf,   # phase 8: feedback, highlight 3 (self-paced)
+                                        0.5    # phase 9: ITI
+                                        ])
+
+            return PracticeTrial(ID, parameters, phase_durations, session=session, screen=screen)
+        else:
+            return LearningTrial(ID, parameters, phase_durations, session=session, screen=screen)
 
     def run(self):
         """ Runs this Instrumental Learning task"""
@@ -381,7 +430,16 @@ pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8
         # important
         # self.block_start_time = 0
 
-        for block_n in np.unique(self.design.block):
+        all_blocks = np.unique(self.design.block)
+        current_block_id = -1
+        while True:   # while loop to allow for moving between blocks
+            current_block_id += 1
+            block_n = all_blocks[current_block_id]
+            print(current_block_id)
+            print(block_n)
+            # this_block_design = self.design.loc[self.design.block == block_n]
+
+        # for block_n in np.unique(self.design.block):
             if block_n < self.start_block:
                 continue
             this_block_design = self.design.loc[self.design.block == block_n]
@@ -391,6 +449,8 @@ pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8
                                               method='sequential')
 
             for block_trial_ID, this_trial_info in enumerate(trial_handler):
+                print(block_trial_ID)
+                print(this_trial_info)
 
                 # show instruction screen (do this in inner loop so we can peek into the next cue)
                 if block_n in [1, 4] and block_trial_ID == 0:
@@ -422,11 +482,12 @@ pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8
                 # for preparing the next trial. (but never below 0.1s)
                 these_phase_durations[-1] = np.max([0.1, these_phase_durations[-1]-0.5])
 
-                this_trial = LearningTrial(ID=int(this_trial_info.trial_ID),
-                                           parameters=this_trial_parameters,
-                                           phase_durations=these_phase_durations,
-                                           session=self,
-                                           screen=self.screen)
+                this_trial = self.run_trial(ID=int(this_trial_info.trial_ID),
+                                            annotate=this_trial_info.annotate,
+                                            parameters=this_trial_parameters,
+                                            phase_durations=these_phase_durations,
+                                            session=self,
+                                            screen=self.screen)
 
                 # run the prepared trial
                 this_trial.run()
@@ -454,6 +515,11 @@ pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8
                 #                       self.block_start_time)
                 # Counter-intuitive, but jitter_time is END of the jitter period = onset of stim
 
+                if self.restart_block:
+                    current_block_id -= 1
+                    # self.restart_block = False
+                    break
+
                 if self.stopped:
                     # out of trial
                     break
@@ -465,13 +531,16 @@ pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8
                 # out of block
                 break
 
-            # end of block
-            this_trial = EndOfBlockTrial(ID=int('999' + str(block_n)),
-                                         parameters={},
-                                         phase_durations=[0.5, 1000],
-                                         session=self,
-                                         screen=self.screen)
-            this_trial.run()
+            if not self.restart_block:
+                # end of block
+                this_trial = EndOfBlockTrial(ID=int('999' + str(block_n)),
+                                             parameters={},
+                                             phase_durations=[0.5, 1000],
+                                             session=self,
+                                             screen=self.screen)
+                this_trial.run()
+            else:
+                self.restart_block = False
 
         self.close()
 
@@ -491,8 +560,9 @@ if __name__ == '__main__':
     my_monitor.setDistance(config.get('screen', 'physical_screen_distance'))
     my_monitor.saveMon()
 
+    sub_id = 'PRACTICE'
     # Set-up session
-    sess = LearningSession('DEBUG',
+    sess = LearningSession(sub_id,
                            1,
                            tr=0,
                            start_block=0,
