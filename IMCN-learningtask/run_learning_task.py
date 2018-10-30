@@ -41,55 +41,45 @@ def main():
     my_monitor.saveMon()
 
     tr = 0
-
     initials = raw_input('Your initials/subject number: ')
     index_num = int(raw_input('What is the pp num? [integer or I will crash]: '))
-    # if initials == 'pilot' or initials == 'practice':
-    #     session_tr = 2
-    # else:
-    #     session_tr = int(raw_input('Session TR: '))
+    practice = raw_input('Start with practice? [y/n, default y]: ') or 'y'
+    start_block = raw_input('Start block? [default 1]: ') or 1
+    if start_block > 1:
+        pass
+        # ToDo: find last run data to get points from
 
-    if initials == 'practice':
-        start_block = 1
-        simulate = 'y'
-    else:
-        start_block = int(raw_input('At which block do you want to start? NB: 1 is the first block! '))
-        if start_block > 1:
-            # ToDo check if previous file with total points exist
-            now = datetime.datetime.now()
-            opfn = now.strftime("%Y-%m-%d")
-            # ToDo
-            # expected_filename = initials + '_' + str(session_tr) + '_' + opfn
-            # fns = glob.glob('./data/' + expected_filename + '_*_staircases.pkl')
-            # fns.sort()
-            # if len(fns) == 0:
-            #     raw_input('Could not find previous stairs for this subject today... Enter any key to verify you want '
-            #               'to make new staircases. ')
-            # elif len(fns) == 1:
-            #     print('Found previous staircase file: %s' % fns[0])
-            # elif len(fns) > 1:
-            #     print('Found multiple staircase files. Please remove the unwanted ones, otherwise I cannot run.')
-            #     print(fns)
-            #     core.quit()
+    scanner = raw_input('Are you in the scanner? [y/n, default n]: ') or 'n'
+    while not scanner in ['n', 'y']:
+        print('I don''t understand that. Please enter ''y'' or ''n''.')
+        scanner = raw_input('Are you in the scanner? [y/n, default n]: ') or 'n'
 
-        scanner = ''
-        simulate = ''
-        while scanner not in ['y', 'n']:
-            scanner = raw_input('Are you in the scanner (y/n)?: ')
-            if scanner not in ['y', 'n']:
-                print('I don''t understand that. Please enter ''y'' or ''n''.')
+    simulate = 'n'
+    if scanner == 'n':
+        simulate = raw_input('Do you want to simulate scan pulses? [y/n, default n]: ') or 'n'
+        while not simulate in ['n', 'y']:
+            print('I don''t understand that. Please enter ''y'' or ''n''.')
+            simulate = raw_input('Do you want to simulate scan pulses? [y/n, default n]: ') or 'n'
 
-        if scanner == 'n':
-            while simulate not in ['y', 'n']:
-                simulate = raw_input('Do you want to simulate scan pulses? This is useful during behavioral pilots (y/n): ')
-                if simulate not in ['y', 'n']:
-                    print('I don''t understand that. Please enter ''y'' or ''n''.')
+    if scanner == 'y' or simulate == 'y':
+        tr = float(raw_input('What is the TR?: ')) or 0
 
-        if scanner == 'y' or simulate == 'y':
-            tr = float(raw_input('What is the TR?: '))
+    ### start practice?
+    if practice == 'y':
+        sess_prac = LearningSession(subject_initials=initials,
+                                    index_number=index_num,
+                                    tr=tr,
+                                    start_block=start_block,
+                                    config=config,
+                                    practice=True)
+        sess_prac.run()
 
-    sess = LearningSession(subject_initials=initials, index_number=index_num, tr=tr, start_block=start_block,
-                           config=config)
+    sess = LearningSession(subject_initials=initials,
+                           index_number=index_num,
+                           tr=tr,
+                           start_block=start_block,
+                           config=config,
+                           practice=False)
 
     if simulate == 'y':
         # Run with simulated scanner (useful for behavioral pilots with eye-tracking)

@@ -1,6 +1,6 @@
 from exptools.core.session import MRISession
-from LearningTrial import LearningTrial, EndOfBlockTrial, InstructionTrial, PracticeTrial
-from LearningStimulus import LearningStimulus, FixationCross
+from LearningTrial import LearningTrial, InstructionTrial, PracticeTrial #, EndOfExperimentTrial, EndOfBlockTrial
+from LearningStimulus import LearningStimulus, FixationCross, LearningStimulusSingle
 from psychopy import visual, data
 import datetime
 import glob
@@ -13,7 +13,7 @@ import cPickle as pkl
 
 class LearningSession(MRISession):
 
-    def __init__(self, subject_initials, index_number, tr, start_block, config):
+    def __init__(self, subject_initials, index_number, tr, start_block, config, debug=False, practice=False):
         super(LearningSession, self).__init__(subject_initials,
                                               index_number,
                                               tr=tr,
@@ -25,6 +25,8 @@ class LearningSession(MRISession):
         self.start_block = start_block  # allows for starting at a later block than 1
         self.warmup_trs = config.get('mri', 'warmup_trs')
         self.restart_block = False
+        self.debug = debug
+        self.practice = practice
 
         self.response_button_signs = [config.get('input', 'response_button_left'),
                                       config.get('input', 'response_button_right')]
@@ -41,7 +43,6 @@ class LearningSession(MRISession):
                                screen_nr=config.get('screen', 'screen_nr'),
                                mouse_visible=config.get('screen', 'mouse_visible'))
 
-        # Try this
         # TODO: think about really including this?
         self.screen.recordFrameIntervals = True
 
@@ -64,8 +65,10 @@ class LearningSession(MRISession):
 
     def load_design(self):
 
-        if self.subject_initials == 'DEBUG' or self.subject_initials=='PRACTICE':
-            fn = 'sub-' + str(self.subject_initials).zfill(2) + '_design'
+        if self.practice:
+            fn = 'sub-PRACTICE_design'
+        elif self.debug:
+            fn = 'sub-DEBUG_design'
         else:
             fn = 'sub-' + str(self.index_number).zfill(2) + '_design'
 
@@ -74,8 +77,8 @@ class LearningSession(MRISession):
 
         # For practice sessions, we want to annotate some stuff but only in the first three trials per block (?)
         self.design['annotate'] = False
-        if self.subject_initials == 'PRACTICE':
-            for block in self.design.block.unique():
+        if self.practice:
+            for block in [1, 4]:
                 idx = self.design.block == block
                 idx = (np.cumsum(idx) > 0) & (np.cumsum(idx) < 2)  # run only the first trial annotated
                 self.design.loc[idx, 'annotate'] = True
@@ -95,7 +98,12 @@ class LearningSession(MRISession):
 
         return n_moneys_capped
 
-    def update_instruction_screen(self, task='SAT', block=0, experiment_start=False):
+    def update_instruction_screen(self, task='SAT',
+                                  block=0,
+                                  show_upcoming_stimuli=False,
+                                  experiment_start=False,
+                                  end_of_block=False,
+                                  end_of_session=False):
         """
         Updates instruction screen based on upcoming block
         :param task: ['SAT', 'vanilla']
@@ -104,8 +112,13 @@ class LearningSession(MRISession):
         """
 
         if experiment_start:
+            # Session starts
+            if self.practice:
+                txt = 'Welcome to this practice session!'
+            else:
+                txt = 'Welcome to this experiment!'
             self.current_instruction_screen = [
-                visual.TextStim(win=self.screen, text='Welcome to this experiment!',
+                visual.TextStim(win=self.screen, text=txt,
                                 height=self.config.get('text', 'height'),
                                 units=self.config.get('text', 'units'),
                                 pos=(0, 2)),
@@ -114,105 +127,222 @@ class LearningSession(MRISession):
                                 units=self.config.get('text', 'units'),
                                 pos=(0, -2))
             ]
-        elif block == 1 or block == 4:
+        elif end_of_session:
+            # Session ends
+            if self.practice:
+                txt = 'This is the end of the practice session\n\nPress <space bar> to continue to the real experiment'
+            else:
+                txt = 'This is the end of experiment\n\nPlease inform the experiment leader now'
+            self.current_instruction_screen = [
+                visual.TextStim(self.screen,
+                                pos=(0, 0),
+                                units=self.config.get('text', 'units'),
+                                height=self.config.get('text', 'height'),
+                                text=txt,
+                                wrapWidth=80
+                                )]
+
+        elif block in [1, 4] and not show_upcoming_stimuli:
+            # Announce vanilla / SAT task
             if task == 'SAT':
-                if self.subject_initials == 'PRACTICE':
+                if self.practice:
                     self.current_instruction_screen = [
                         visual.TextStim(self.screen,
-                                        text='You will now practice the task with speed/accuracy cues. We will '
-                                             'again illustrate how each trial works.\n\nPress <space bar> to start',
+                                        text='You will next practice the task with speed/accuracy cues. We will '
+                                             'again first show you what all of the stimuli in the upcoming block look '
+                                             'like.',
                                         height=self.config.get('text', 'height'),
                                         units=self.config.get('text', 'units'),
-                                        pos=(0, -2)
-                                        )]
+                                        pos=(0, 0),
+                                        wrapWidth=self.config.get('text', 'wrap_width')
+                                        ),
+                        visual.TextStim(self.screen,
+                                        text='Press <space bar> to continue',
+                                        pos=(0, -8), italic=True,
+                                        units=self.config.get('text', 'units'),
+                                        height=self.config.get('text', 'height'),
+                                        wrapWidth=self.config.get('text', 'wrap_width')
+                                        )
+                    ]
                 else:
                     # prep screen here
                     self.current_instruction_screen = [
                         self.instruction_screens[1]
                     ]
             elif task == 'vanilla':
-                if self.subject_initials == 'PRACTICE':
+                if self.practice:
                     self.current_instruction_screen = [
                         visual.TextStim(self.screen,
-                                        text='You will first practice the task without any speed/accuracy cues. We will '
-                                             'first illustrate how each trial works.\n\nPress <space bar> to start',
+                                        text='We will first introduce the task without any speed/accuracy cues.\n\n'
+                                             'To start with, we will show you what all of the stimuli in the upcoming '
+                                             'block look like',
                                         height=self.config.get('text', 'height'),
                                         units=self.config.get('text', 'units'),
-                                        pos=(0, -2)
-                                        )]
+                                        pos=(0, 0),
+                                        wrapWidth=self.config.get('text', 'wrap_width')
+                                        ),
+                        visual.TextStim(self.screen,
+                                        text='Press <space bar> to continue',
+                                        pos=(0, -8), italic=True,
+                                        units=self.config.get('text', 'units'),
+                                        height=self.config.get('text', 'height'),
+                                        wrapWidth=self.config.get('text', 'wrap_width')
+                                        )
+                    ]
                 else:
                     self.current_instruction_screen = [
                         self.instruction_screens[0]
                     ]
 
-    def counterbalance_stimuli(self, all_sets):
-        """
-        For counterbalancing: determine 'order' of the provided stimulus set. That is, we want to make sure that a
-        specific character has varying probabilities of 'winning' over participants. E.g., assuming your stimuli are
-        ABCDEFGHIJKL, and you want ABCDEF and GHIJKL never to intermix, you may want this:
+        elif show_upcoming_stimuli:
+            # show all upcoming stimuli
+            idx = (self.design.block == block)
+            all_upcoming_pairs = self.design.loc[idx].groupby(['stimulus_set'])[['stim_left', 'stim_right']].last().reset_index()[
+                ['stim_left', 'stim_right']].values.tolist()
+            # all_upcoming_pairs = [self.design.loc[idx, 'stim_left'].unique(), self.design.loc[idx, 'stim_right'].unique()]
+            y_positions = [4, 0, -4]
 
-pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8    stim_9    stim_10    stim_11    stim_12
---  ----  --------  --------  --------  --------  --------  --------  --------  --------  --------  ---------  ---------  ---------
- 0     1  A         B         C         D         E         F         G         H         I         J          K          L
- 1     2  B         A         D         C         F         E         H         G         J         I          L          K
- 2     3  C         D         E         F         A         B         I         J         K         L          G          H
- 3     4  D         C         F         E         B         A         J         I         L         K          H          G
- 4     5  E         F         A         B         C         D         K         L         G         H          I          J
- 5     6  F         E         B         A         D         C         L         K         H         G          J          I
- 6     7  G         H         I         J         K         L         A         B         C         D          E          F
- 7     8  H         G         J         I         L         K         B         A         D         C          F          E
- 8     9  I         J         K         L         G         H         C         D         E         F          A          B
- 9    10  J         I         L         K         H         G         D         C         F         E          B          A
-10    11  K         L         G         H         I         J         E         F         A         B          C          D
-11    12  L         K         H         G         J         I         F         E         B         A          D          C
-        """
-        import itertools
-        from copy import deepcopy
+            self.current_instruction_screen = [
+                visual.TextStim(self.screen,
+                                text='The figures below will be your choice options in the next block. Have a '
+                                     'look at them, and try to remember what they look like',
+                                pos=(0, 8),
+                                units=self.config.get('text', 'units'),
+                                height=self.config.get('text', 'height'),
+                                wrapWidth=self.config.get('text', 'wrap_width')
+                                )
+            ]
 
-        n_shifts = [0, 1, 2]  # assuming 6 stimuli, but you could do more, or less...
-        rev_inner = [False, True]
-        switch_sets = [False, True]
+            for i, pair in enumerate(all_upcoming_pairs):
+                self.current_instruction_screen.append(
+                    visual.TextStim(self.screen, pos=(self.config.get('stimulus', 'x_pos')[0], y_positions[i]),
+                                    text=pair[0], height=self.config.get('stimulus', 'text_height'),
+                                    units=self.config.get('text', 'units'),
+                                    font='Agathodaimon', fontFiles=['./lib/AGATHODA.TTF'])
+                )
+                self.current_instruction_screen.append(
+                    visual.TextStim(self.screen, pos=(self.config.get('stimulus', 'x_pos')[1], y_positions[i]),
+                                    text=pair[1], height=self.config.get('stimulus', 'text_height'),
+                                    units=self.config.get('text', 'units'),
+                                    font='Agathodaimon', fontFiles=['./lib/AGATHODA.TTF'])
+                )
 
-        cb_df = pd.DataFrame(list(itertools.product(switch_sets, n_shifts, rev_inner)),
-                             columns=['switch_sets', 'n_shifts', 'rev_inner'])
-        cb_df['pp'] = np.arange(1, cb_df.shape[0] + 1)
-        for set_n in range(1, 13):
-            cb_df['stim_%d' % set_n] = None
+            if self.practice:
+                self.current_instruction_screen.append(
+                    visual.TextStim(self.screen,
+                                    text='Next, we will show an example trial, with step-by-step explanations of what to '
+                                         'do.',
+                                    pos=(0, -8),
+                                    units=self.config.get('text', 'units'),
+                                    height=self.config.get('text', 'height'),
+                                    wrapWidth=self.config.get('text', 'wrap_width')
+                                    ))
+            self.current_instruction_screen.append(
+                visual.TextStim(self.screen,
+                                text='To start the task, press <space bar>!',
+                                pos=(0, -10), italic=True,
+                                units=self.config.get('text', 'units'),
+                                height=self.config.get('text', 'height'),
+                                wrapWidth=self.config.get('text', 'wrap_width')
+                                )
+            )
 
-        for pp in cb_df['pp']:
-            idx = cb_df.pp == pp
-            switch_sets = cb_df.loc[idx, 'switch_sets'].iloc[0]
-            reverse_inner = cb_df.loc[idx, 'rev_inner'].iloc[0]
-            n_shifts = cb_df.loc[idx, 'n_shifts'].iloc[0]
+        elif end_of_block:
+            # guestimate the amount of money to be earned
+            estimated_moneys = self.estimate_bonus()
+            end_str = '!' if estimated_moneys > 0 else ''
+            break_str = 'You can take a short break now. ' if not self.practice else ''
 
-            if switch_sets:
-                sets = deepcopy([all_sets[3:], all_sets[:3]])
-            else:
-                sets = deepcopy([all_sets[:3], all_sets[3:]])
+            self.current_instruction_screen = [
+                visual.TextStim(self.screen, pos=(0, 4),
+                                units=self.config.get('text', 'units'),
+                                height=self.config.get('text', 'height'),
+                                text='End of block. So far, you earned %d points%s' % (
+                                self.total_points, end_str),
+                                wrapWidth=self.config.get('text', 'wrap_width')
+                                ),
+                visual.TextStim(self.screen, pos=(0, 0),
+                                units=self.config.get('text', 'units'),
+                                height=self.config.get('text', 'height'),
+                                text='Based on your performance so far, it looks like you will receive a bonus of approximately %.2f euro%s' % (estimated_moneys, end_str),
+                                wrapWidth=self.config.get('text', 'wrap_width')
+                                ),
+                visual.TextStim(self.screen, pos=(0, -4),
+                                units=self.config.get('text', 'units'),
+                                height=self.config.get('text', 'height'),
+                                text='%sPress <space bar> to continue.' % break_str,
+                                wrapWidth=self.config.get('text', 'wrap_width')
+                                )
+            ]
 
-            sets_allocated = 0
-            for set_n, set_ in enumerate(sets):
-                for i in range(n_shifts):
-                    set_.insert(len(set_), set_.pop(0))  # move first item to last place
-
-                if reverse_inner:
-                    set_ = [x[::-1] for x in set_]  # reverse inner order
-
-                # print('pp %d, %d, %s' % (pp, set_n, set_))
-                #### NB: you could just use set_ as a final result; the placing in the dataframe and then reverting
-                # back to a nested list is definitely not necessary but may help clarify what's going on here...
-                for to_allocate in [0, 1, 2]:
-                    for to_allocate_i in [0, 1]:
-                        cb_df.loc[idx, 'stim_%d' % (sets_allocated + 1)] = set_[to_allocate][to_allocate_i]
-                        sets_allocated += 1
-
-        pp_zero_based = self.index_number - 1
-        row_iloc = int(pp_zero_based - np.floor(pp_zero_based / 12) * 12)
-        colnames = cb_df.columns
-        stim_list = cb_df.iloc[row_iloc][[x for x in colnames if 'stim' in x]].values.tolist()
-        stim_nested_list = [[stim_list[0 + y * 2], stim_list[1 + y * 2]] for y in range(6)]
-        print('Stimuli/set order for this pp: %s' % stim_nested_list)
-        return stim_nested_list
+        #     def counterbalancounterbalancece_stimuli(self, all_sets):
+#         """
+#         For counterbalancing: determine 'order' of the provided stimulus set. That is, we want to make sure that a
+#         specific character has varying probabilities of 'winning' over participants. E.g., assuming your stimuli are
+#         ABCDEFGHIJKL, and you want ABCDEF and GHIJKL never to intermix, you may want this:
+#
+# pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8    stim_9    stim_10    stim_11    stim_12
+# --  ----  --------  --------  --------  --------  --------  --------  --------  --------  --------  ---------  ---------  ---------
+#  0     1  A         B         C         D         E         F         G         H         I         J          K          L
+#  1     2  B         A         D         C         F         E         H         G         J         I          L          K
+#  2     3  C         D         E         F         A         B         I         J         K         L          G          H
+#  3     4  D         C         F         E         B         A         J         I         L         K          H          G
+#  4     5  E         F         A         B         C         D         K         L         G         H          I          J
+#  5     6  F         E         B         A         D         C         L         K         H         G          J          I
+#  6     7  G         H         I         J         K         L         A         B         C         D          E          F
+#  7     8  H         G         J         I         L         K         B         A         D         C          F          E
+#  8     9  I         J         K         L         G         H         C         D         E         F          A          B
+#  9    10  J         I         L         K         H         G         D         C         F         E          B          A
+# 10    11  K         L         G         H         I         J         E         F         A         B          C          D
+# 11    12  L         K         H         G         J         I         F         E         B         A          D          C
+#         """
+#         import itertools
+#         from copy import deepcopy
+#
+#         n_shifts = [0, 1, 2]  # assuming 6 stimuli, but you could do more, or less...
+#         rev_inner = [False, True]
+#         switch_sets = [False, True]
+#
+#         cb_df = pd.DataFrame(list(itertools.product(switch_sets, n_shifts, rev_inner)),
+#                              columns=['switch_sets', 'n_shifts', 'rev_inner'])
+#         cb_df['pp'] = np.arange(1, cb_df.shape[0] + 1)
+#         for set_n in range(1, 13):
+#             cb_df['stim_%d' % set_n] = None
+#
+#         for pp in cb_df['pp']:
+#             idx = cb_df.pp == pp
+#             switch_sets = cb_df.loc[idx, 'switch_sets'].iloc[0]
+#             reverse_inner = cb_df.loc[idx, 'rev_inner'].iloc[0]
+#             n_shifts = cb_df.loc[idx, 'n_shifts'].iloc[0]
+#
+#             if switch_sets:
+#                 sets = deepcopy([all_sets[3:], all_sets[:3]])
+#             else:
+#                 sets = deepcopy([all_sets[:3], all_sets[3:]])
+#
+#             sets_allocated = 0
+#             for set_n, set_ in enumerate(sets):
+#                 for i in range(n_shifts):
+#                     set_.insert(len(set_), set_.pop(0))  # move first item to last place
+#
+#                 if reverse_inner:
+#                     set_ = [x[::-1] for x in set_]  # reverse inner order
+#
+#                 # print('pp %d, %d, %s' % (pp, set_n, set_))
+#                 #### NB: you could just use set_ as a final result; the placing in the dataframe and then reverting
+#                 # back to a nested list is definitely not necessary but may help clarify what's going on here...
+#                 for to_allocate in [0, 1, 2]:
+#                     for to_allocate_i in [0, 1]:
+#                         cb_df.loc[idx, 'stim_%d' % (sets_allocated + 1)] = set_[to_allocate][to_allocate_i]
+#                         sets_allocated += 1
+#
+#         pp_zero_based = self.index_number - 1
+#         row_iloc = int(pp_zero_based - np.floor(pp_zero_based / 12) * 12)
+#         colnames = cb_df.columns
+#         stim_list = cb_df.iloc[row_iloc][[x for x in colnames if 'stim' in x]].values.tolist()
+#         stim_nested_list = [[stim_list[0 + y * 2], stim_list[1 + y * 2]] for y in range(6)]
+#         print('Stimuli/set order for this pp: %s' % stim_nested_list)
+#         return stim_nested_list
 
     def prepare_objects(self, counterbalance=True):
         """
@@ -240,30 +370,48 @@ pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8
                                                                                                              set)))
 
         # load all possible stimuli
-        all_stim = []
-        for set_n in range(10):
-            # assume a maximum of 10 sets, bit arbitrary but seems enough
-            if config.has_option('stimulus', 'set_%d' % set_n):
-                all_stim.append(config.get('stimulus', 'set_%d' % set_n))
+        # all_stim = []
+        # for set_n in range(10):
+        #     # assume a maximum of 10 sets, bit arbitrary but seems enough
+        #     if config.has_option('stimulus', 'set_%d' % set_n):
+        #         all_stim.append(config.get('stimulus', 'set_%d' % set_n))
+        #
+        # if counterbalance:
+        #     # counterbalance, based on index_num
+        #     ###### WARNING: This is set-up to be specific for my experiment #######
+        #     all_stim = self.counterbalance_stimuli(all_stim)
 
-        if counterbalance:
-            # counterbalance, based on index_num
-            ###### WARNING: This is set-up to be specific for my experiment #######
-            all_stim = self.counterbalance_stimuli(all_stim)
+        # let's find all stimuli first from dataframe
+        all_stimuli = np.unique(np.hstack([self.design.stim_high.unique(), self.design.stim_low.unique()]))
 
-        # Stimuli
-        self.stimuli = []
-        for stim in all_stim:
-            self.stimuli.append(
-                LearningStimulus(self.screen,
-                                 stimulus_type=config.get('stimulus', 'type'),
-                                 width=config.get('stimulus', 'width'),
-                                 height=config.get('stimulus', 'height'),
-                                 set=stim,
-                                 text_height=config.get('stimulus', 'text_height'),
-                                 units=config.get('stimulus', 'units'),
-                                 x_pos=config.get('stimulus', 'x_pos'),
-                                 rect_line_width=config.get('stimulus', 'rect_line_width')))
+        self.stimuli = {'left': {}, 'right': {}}
+        for stimulus in all_stimuli:
+            for i, location in enumerate(['left', 'right']):
+                self.stimuli[location][stimulus] = LearningStimulusSingle(
+                    screen=self.screen,
+                    stimulus=stimulus,
+                    stimulus_type=config.get('stimulus', 'type'),
+                    width=config.get('stimulus', 'width'),
+                    height=config.get('stimulus', 'height'),
+                    text_height=config.get('stimulus', 'text_height'),
+                    units=config.get('stimulus', 'units'),
+                    x_pos=config.get('stimulus', 'x_pos')[i],
+                    rect_line_width=config.get('stimulus',
+                                               'rect_line_width'))
+
+        # # Stimuli
+        # self.stimuli = []
+        # for stim in all_stim:
+        #     self.stimuli.append(
+        #         LearningStimulus(self.screen,
+        #                          stimulus_type=config.get('stimulus', 'type'),
+        #                          width=config.get('stimulus', 'width'),
+        #                          height=config.get('stimulus', 'height'),
+        #                          set=stim,
+        #                          text_height=config.get('stimulus', 'text_height'),
+        #                          units=config.get('stimulus', 'units'),
+        #                          x_pos=config.get('stimulus', 'x_pos'),
+        #                          rect_line_width=config.get('stimulus', 'rect_line_width')))
 
         # load instruction screen pdfs
         self.instruction_screens = [
@@ -333,7 +481,7 @@ pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8
                                                    italic=True,
                                                    height=config.get('text', 'height'), alignHoriz='center')
 
-        if self.subject_initials == 'DEBUG':
+        if self.debug:
              pos = -config.get('screen', 'size')[0]/3, config.get('screen', 'size')[1]/3
              self.debug_txt = visual.TextStim(win=self.screen,
                                               alignVert='top',
@@ -396,9 +544,9 @@ pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8
 
         if annotate:
             # adjust trial parameters to allow for annotation phases
-            phase_2 = np.Inf if parameters['cue'] in ['spd', 'acc'] else -0.001
+            phase_2 = np.Inf if parameters['cue'] in ['SPD', 'ACC'] else -0.001
             phase_durations = np.array([-0.0001,   # phase 0: wait for scan pulse
-                                        -0.1,     # phase 1: fix cross
+                                        np.Inf,     # phase 1: fix cross
                                         phase_2,   # phase 2: cue
                                         -0.1,     # phase 3: fix cross
                                         np.Inf,   # phase 4: stimulus
@@ -416,14 +564,13 @@ pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8
     def run(self):
         """ Runs this Instrumental Learning task"""
         # start by showing welcome screen, but only if the experiment is started from block 0
-        if self.start_block == 0:
+        if self.start_block == 1:
             self.update_instruction_screen(block=0, experiment_start=True)
             _ = InstructionTrial(ID=self.instruction_trial_n,
                                  parameters={},
                                  phase_durations=[0.5, 1000],
                                  session=self,
                                  screen=self.screen).run()
-
             self.instruction_trial_n -= 1
 
         # # Set start time of block 0 to 0 (useful if you want to calculate durations on the fly, otherwise not so
@@ -434,23 +581,23 @@ pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8
         current_block_id = -1
         while True:   # while loop to allow for moving between blocks
             current_block_id += 1
+            if len(all_blocks) <= current_block_id:
+                print('End of experiment!')
+                # self.stopped = True
+                break
             block_n = all_blocks[current_block_id]
-            print(current_block_id)
-            print(block_n)
-            # this_block_design = self.design.loc[self.design.block == block_n]
 
-        # for block_n in np.unique(self.design.block):
             if block_n < self.start_block:
                 continue
-            this_block_design = self.design.loc[self.design.block == block_n]
 
+            # Get all trials for the next block, create trial handler
+            this_block_design = self.design.loc[self.design.block == block_n]
             trial_handler = data.TrialHandler(this_block_design.to_dict('records'),
                                               nReps=1,
                                               method='sequential')
 
+            # Loop over trials
             for block_trial_ID, this_trial_info in enumerate(trial_handler):
-                print(block_trial_ID)
-                print(this_trial_info)
 
                 # show instruction screen (do this in inner loop so we can peek into the next cue)
                 if block_n in [1, 4] and block_trial_ID == 0:
@@ -465,8 +612,18 @@ pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8
                                          screen=self.screen).run()
                     self.instruction_trial_n -= 1
 
-                this_trial_parameters = {'stimulus_set': int(this_trial_info['stimulus_set']),
-                                         'correct_stim_lr': bool(this_trial_info['correct_stim_lr']),
+                    # also, show upcoming stimuli
+                    self.update_instruction_screen(block=block_n, show_upcoming_stimuli=True)
+                    _ = InstructionTrial(ID=self.instruction_trial_n,
+                                         parameters={},
+                                         phase_durations=[0.5, 1000],
+                                         session=self,
+                                         screen=self.screen).run()
+                    self.instruction_trial_n -= 1
+
+                # Actual trial
+                this_trial_parameters = {'stim_left': this_trial_info['stim_left'],
+                                         'stim_right': this_trial_info['stim_right'],
                                          'correct_response': this_trial_info['correct_stim_lr'],
                                          'block': block_n,
                                          'block_trial_ID': block_trial_ID,
@@ -517,8 +674,11 @@ pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8
 
                 if self.restart_block:
                     current_block_id -= 1
-                    # self.restart_block = False
                     break
+
+                # check for last trial?
+                # if this_trial_info.trial_ID == self.design.trial_ID.max():
+                #     self.stopped = True
 
                 if self.stopped:
                     # out of trial
@@ -532,15 +692,28 @@ pp  stim_1    stim_2    stim_3    stim_4    stim_5    stim_6    stim_7    stim_8
                 break
 
             if not self.restart_block:
-                # end of block
-                this_trial = EndOfBlockTrial(ID=int('999' + str(block_n)),
-                                             parameters={},
-                                             phase_durations=[0.5, 1000],
-                                             session=self,
-                                             screen=self.screen)
-                this_trial.run()
+                if not self.stopped:
+                    # end of block, show expected score
+                    self.update_instruction_screen(end_of_block=True)
+                    _ = InstructionTrial(ID=self.instruction_trial_n,
+                                         parameters={},
+                                         phase_durations=[0.5, 1000],
+                                         session=self,
+                                         screen=self.screen).run()
+                    self.instruction_trial_n -= 1
             else:
                 self.restart_block = False
+
+        if not self.stopped:
+            # End of experiment
+            print('yes?')
+            self.update_instruction_screen(end_of_session=True)
+            _ = InstructionTrial(ID=self.instruction_trial_n,
+                                 parameters={},
+                                 phase_durations=[0.5, 1000],
+                                 session=self,
+                                 screen=self.screen).run()
+            self.instruction_trial_n -= 1
 
         self.close()
 
@@ -560,13 +733,15 @@ if __name__ == '__main__':
     my_monitor.setDistance(config.get('screen', 'physical_screen_distance'))
     my_monitor.saveMon()
 
-    sub_id = 'PRACTICE'
+    # sub_id = 'PRACTICE'
     # Set-up session
-    sess = LearningSession(sub_id,
+    sess = LearningSession('1',
                            1,
                            tr=0,
                            start_block=0,
-                           config=config)
+                           config=config,
+                           debug=True,
+                           practice=True)
 
     # EMULATOR
     # from psychopy.hardware.emulator import launchScan
