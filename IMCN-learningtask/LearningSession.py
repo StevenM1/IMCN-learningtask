@@ -248,25 +248,41 @@ class LearningSession(MRISession):
                                     font='Agathodaimon', fontFiles=['./lib/AGATHODA.TTF'])
                 )
 
+            # Boxes!
+            for i, pair in enumerate(all_upcoming_pairs):
+                self.current_instruction_screen.append(
+                    visual.Rect(self.screen, width=14, height=3.5, pos=(0, y_positions[i]), units='deg')
+                )
             if self.practice:
                 self.current_instruction_screen.append(
                     visual.TextStim(self.screen,
-                                    text='Next, we will show an example trial, with step-by-step explanations of what to '
-                                         'do.',
-                                    pos=(0, -8),
+                                    text='The pairs above will also be presented together, as indicated by the '
+                                         'rectangles.\nNext, we will show an example trial, with step-by-step '
+                                         'explanations of what to do',
+                                    pos=(0, -9),
                                     units=self.config.get('text', 'units'),
                                     height=self.config.get('text', 'height'),
                                     wrapWidth=self.config.get('text', 'wrap_width')
                                     ))
-            self.current_instruction_screen.append(
-                visual.TextStim(self.screen,
-                                text='To start the task, press <space bar>!',
-                                pos=(0, -10), italic=True,
-                                units=self.config.get('text', 'units'),
-                                height=self.config.get('text', 'height'),
-                                wrapWidth=self.config.get('text', 'wrap_width')
-                                )
-            )
+                self.current_instruction_screen.append(
+                    visual.TextStim(self.screen,
+                                    text='To start the practice trial, press <space bar>!',
+                                    pos=(0, -13), italic=True,
+                                    units=self.config.get('text', 'units'),
+                                    height=self.config.get('text', 'height'),
+                                    wrapWidth=self.config.get('text', 'wrap_width')
+                                    )
+                )
+            else:
+                self.current_instruction_screen.append(
+                    visual.TextStim(self.screen,
+                                    text='To start the task, press <space bar>!',
+                                    pos=(0, -13), italic=True,
+                                    units=self.config.get('text', 'units'),
+                                    height=self.config.get('text', 'height'),
+                                    wrapWidth=self.config.get('text', 'wrap_width')
+                                    )
+                )
 
         elif end_of_block:
             # guestimate the amount of money to be earned
