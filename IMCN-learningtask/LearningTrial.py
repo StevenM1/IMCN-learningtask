@@ -586,7 +586,9 @@ class PracticeTrial(LearningTrial):
                                     text='These are your choice options',
                                     pos=(0, 4), units='deg'),
                     visual.TextStim(win=self.screen,
-                                    text='Decide which you want to choose now!',
+                                    text='Decide which you want to choose now!\nPress %s to choose left OR %s to '
+                                         'choose right' %(self.session.response_button_signs[0],
+                                                          self.session.response_button_signs[1]),
                                     pos=(0, -4), units='deg',
                                     wrapWidth=self.session.config.get('text', 'wrap_width')
                                     )],
@@ -715,6 +717,10 @@ class PracticeTrial(LearningTrial):
 
                     # if self.phase < 8:
                     self.phase_forward()
+                    if self.phase == 2 and self.current_cue is None:
+                        print('moving up!')
+                        self.cue_time = self.session.clock.getTime()
+                        self.phase_forward()  # move another phase forward
                     # else:
                     #     self.stopped = True
 

@@ -83,7 +83,7 @@ class LearningSession(MRISession):
                 idx = (np.cumsum(idx) > 0) & (np.cumsum(idx) < 2)  # run only the first trial annotated
                 self.design.loc[idx, 'annotate'] = True
 
-    def estimate_bonus(self, return_all=False):
+    def estimate_bonus(self, return_final=False):
         """
         simple linear combination
         y = a*x + b
@@ -91,13 +91,17 @@ class LearningSession(MRISession):
         b = -10/2
         """
 
-        # expected n points if *always* chosen the right answer
-        max_points = self.total_trials * np.mean(self.p_wins) * 100.
+        if return_final:
+            # n points if *always* chosen the right answer, based on *all* trials
+            max_points = self.design.shape[0] * np.mean(self.p_wins) * 100.
+        else:
+            # expected n points if *always* chosen the right answer, based on the number of trials so far
+            max_points = self.total_trials * np.mean(self.p_wins) * 100.
         n_moneys = self.total_points * (10. / max_points) - 10 / 2.
         n_moneys_capped = np.min([np.max([n_moneys, 0]), 5])  # cap at [0, 5]
 
-        if return_all:
-            return max_points, n_moneys
+        if return_final:
+            return max_points, n_moneys_capped
         else:
             return n_moneys_capped
 
@@ -364,8 +368,8 @@ class LearningSession(MRISession):
     def prepare_objects(self, counterbalance=True):
         """
         Prepares all visual objects (instruction/feedback texts, stimuli)
-
         """
+
         config = self.config
 
         # Fixation cross
@@ -555,7 +559,7 @@ class LearningSession(MRISession):
         """ Saves stuff and closes """
 
         points = self.total_points
-        max_points, bonus = self.estimate_bonus(return_all=True)
+        max_points, bonus = self.estimate_bonus(return_final=True)
         print('Total points: %d (maximum: %d), total bonus earned: %.3f' %(points, max_points, bonus))
 
         self.save_data()
