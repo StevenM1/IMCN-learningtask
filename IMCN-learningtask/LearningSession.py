@@ -83,7 +83,7 @@ class LearningSession(MRISession):
                 idx = (np.cumsum(idx) > 0) & (np.cumsum(idx) < 2)  # run only the first trial annotated
                 self.design.loc[idx, 'annotate'] = True
 
-    def estimate_bonus(self):
+    def estimate_bonus(self, return_all=False):
         """
         simple linear combination
         y = a*x + b
@@ -96,7 +96,10 @@ class LearningSession(MRISession):
         n_moneys = self.total_points * (10. / max_points) - 10 / 2.
         n_moneys_capped = np.min([np.max([n_moneys, 0]), 5])  # cap at [0, 5]
 
-        return n_moneys_capped
+        if return_all:
+            return max_points, n_moneys
+        else:
+            return n_moneys_capped
 
     def update_instruction_screen(self, task='SAT',
                                   block=0,
@@ -202,16 +205,30 @@ class LearningSession(MRISession):
             # all_upcoming_pairs = [self.design.loc[idx, 'stim_left'].unique(), self.design.loc[idx, 'stim_right'].unique()]
             y_positions = [4, 0, -4]
 
-            self.current_instruction_screen = [
-                visual.TextStim(self.screen,
-                                text='The figures below will be your choice options in the next block. Have a '
-                                     'look at them, and try to remember what they look like',
-                                pos=(0, 8),
-                                units=self.config.get('text', 'units'),
-                                height=self.config.get('text', 'height'),
-                                wrapWidth=self.config.get('text', 'wrap_width')
-                                )
-            ]
+            if self.practice:
+                self.current_instruction_screen = [
+                    visual.TextStim(self.screen,
+                                    text='The figures below will be your choice options in the next block. Have a '
+                                         'look at them, and try to remember what they look like',
+                                    pos=(0, 8),
+                                    units=self.config.get('text', 'units'),
+                                    height=self.config.get('text', 'height'),
+                                    wrapWidth=self.config.get('text', 'wrap_width')
+                                    )
+                ]
+            else:
+                self.current_instruction_screen = [
+                    visual.TextStim(self.screen,
+                                    text='In the upcoming new block, you will see new choice pairs, illustrated '
+                                         'below. As '
+                                         'before, you will need to learn which choice options are most valuable. '
+                                         'Have a look at them, and try to remember what they look like',
+                                    pos=(0, 9),
+                                    units=self.config.get('text', 'units'),
+                                    height=self.config.get('text', 'height'),
+                                    wrapWidth=self.config.get('text', 'wrap_width')
+                                    )
+                ]
 
             for i, pair in enumerate(all_upcoming_pairs):
                 self.current_instruction_screen.append(
@@ -537,6 +554,10 @@ class LearningSession(MRISession):
     def close(self):
         """ Saves stuff and closes """
 
+        points = self.total_points
+        max_points, bonus = self.estimate_bonus(return_all=True)
+        print('Total points: %d (maximum: %d), total bonus earned: %.3f' %(points, max_points, bonus))
+
         self.save_data()
         super(LearningSession, self).close()
 
@@ -576,6 +597,7 @@ class LearningSession(MRISession):
         # # Set start time of block 0 to 0 (useful if you want to calculate durations on the fly, otherwise not so
         # important
         # self.block_start_time = 0
+
 
         all_blocks = np.unique(self.design.block)
         current_block_id = -1
