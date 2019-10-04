@@ -1,12 +1,8 @@
-
 from LearningSession import *
+from PracticeSession import PracticeSession
 import datetime
 import sys
 
-if sys.version[0] == '2':
-    inp_func = raw_input
-else:
-    inp_func = input
 
 # Kill all background processes (macOS only)
 try:
@@ -30,7 +26,6 @@ if sysErr:
     print('Warning: Failed to renice, probably you arent authorized as superuser')
 
 
-
 def main():
 
     # Set-up monitor on the fly
@@ -41,9 +36,9 @@ def main():
     # my_monitor.setDistance(config.get('screen', 'physical_screen_distance'))
     # my_monitor.saveMon()
 
-    index_number = int(inp_func('What is the pp num? [integer or I will crash]: '))
+    index_number = int(input('What is the pp num? [integer or I will crash]: '))
 #    practice = inp_func('Start with practice? [y/n, default y]: ') or 'y'
-    start_block = inp_func('Start block? [default 1]: ')
+    start_block = input('Start block? [default 1]: ')
     try:
         start_block = int(start_block)
     except:
@@ -53,17 +48,17 @@ def main():
         pass
         # ToDo: find last run data to get points from
 
-    scanner = inp_func('Are you in the scanner? [y/n, default n]: ') or 'n'
+    scanner = input('Are you in the scanner? [y/n, default n]: ') or 'n'
     while not scanner in ['n', 'y']:
         print('I don''t understand that. Please enter ''y'' or ''n''.')
-        scanner = inp_func('Are you in the scanner? [y/n, default n]: ') or 'n'
+        scanner = input('Are you in the scanner? [y/n, default n]: ') or 'n'
 
     simulate = 'n'
     if scanner == 'n':
-        simulate = inp_func('Do you want to simulate scan pulses? [y/n, default n]: ') or 'n'
+        simulate = input('Do you want to simulate scan pulses? [y/n, default n]: ') or 'n'
         while not simulate in ['n', 'y']:
             print('I don''t understand that. Please enter ''y'' or ''n''.')
-            simulate = inp_func('Do you want to simulate scan pulses? [y/n, default n]: ') or 'n'
+            simulate = input('Do you want to simulate scan pulses? [y/n, default n]: ') or 'n'
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%m%S")
     output_str = f'sub-{index_number}_task-learning_datetime-{timestamp}'
@@ -95,35 +90,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-    # Force python to quit (so scanner emulator also stops)
-    # core.quit()
-
-
-
-
-#
-#
-# # Set-up session
-# sess = StopSignalSession('DEBUG',
-#                          1,
-#                          run=1,
-#                          tr=3,
-#                          config=config)
-#
-# # EMULATOR
-# from psychopy.hardware.emulator import launchScan
-# scanner_emulator = launchScan(win=sess.screen, settings={'TR': 2, 'volumes': 30000, 'sync': 't'}, mode='Test')
-#
-# # run
-# sess.run()
-#
-# # Load & dump data
-# import cPickle as pkl
-# from pprint import pprint
-#
-# with open(sess.output_file + '_outputDict.pkl', 'r') as f:
-#     a = pkl.load(f)
-# pprint(a)
-#
-# core.quit()

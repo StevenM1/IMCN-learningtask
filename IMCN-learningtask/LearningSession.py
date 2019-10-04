@@ -246,7 +246,7 @@ class LearningSession(Session):
         global_log['onset_abs'] = global_log['onset'] + self.exp_start
 
         # Only non-responses have a duration
-        nonresp_idx = ~global_log.event_type.isin(['response', 'trigger', 'pulse'])
+        nonresp_idx = ~global_log.event_type.isin(['response', 'trigger', 'pulse', 'non_response_keypress'])
         last_phase_onset = global_log.loc[nonresp_idx, 'onset'].iloc[-1]
 
         if block_nr is None:
@@ -372,7 +372,7 @@ if __name__ == '__main__':
     start_block = 1
     scanner = False
     simulate = 'y'
-    debug = True
+    debug = False
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%m%S")
     output_str = f'sub-{index_number}_task-learning_datetime-{timestamp}'
