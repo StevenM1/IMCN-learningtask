@@ -1,0 +1,97 @@
+preferences:
+  general:
+    audioLib: sounddevice
+    units: deg
+
+window:
+  size: [2560, 1440]
+  pos: [0, 0]
+  color: [0, 0, 0]
+  units: deg
+  fullscr: True
+  winType: pyglet
+  waitBlanking: True
+  useRetina: True
+  useFBO: True
+  allowGUI: False
+  allowStencil: False
+
+monitor:
+  name: default
+  width: 60  # in cm
+  distance: 50  # in cm
+  gamma: 1
+
+mouse:
+  visible: False
+
+eyetracker:
+  address: '100.1.1.1'
+  dot_size: 0.1  # in deg
+  options:
+    active_eye: left  # [right]
+    binocular_enabled: NO  # [YES]
+    heuristic_filter: 2  # [0, OFF, 1, ON]
+    pupil_size_diameter: YES  # [NO]
+    #simulate_head_camera: NO  # [YES]  # GIVES ERROR?
+    #simulation_screen_distance
+    file_event_filter: 'LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,INPUT'
+    link_event_filter: 'LEFT,RIGHT,FIXATION,SACCADE,BLINK,BUTTON'
+    link_sample_data: 'LEFT,RIGHT,GAZE,GAZERES,AREA,STATUS,HTARGET'
+    #file_sample_data: LEFT,RIGHT,GAZE,AREA,GAZERES,STATUS,HTARGET,INPUT'  # GIVES ERROR?
+    calibration_type: HV9  # [H3, HV3, HV5, HV9]
+    x_gaze_constraint: AUTO
+    y_gaze_constraint: AUTO
+    enable_automatic_calibration: YES  # [NO]
+    automatic_calibration_pacing: 1000
+    enable_search_limits: YES
+    track_search_limits: YES
+    autothreshold_click: YES
+    autothreshold_repeat: YES
+    enable_camera_position_detect: YES
+    sample_rate: 1000
+
+mri:
+  warmup_trs: 0
+  simulate: True
+  TR: 2.0  # seconds between volume acquisitions
+  TA: 2.0  # seconds to acquire one slice (?)
+  volumes: 10  # number of 3D volumes to obtain in a given scanning run
+  sync: t  # character used as flag for sync timing, default=‘5’
+  skip: 0  # how many frames to silently omit initially during T1 stabilization, no sync pulse.
+  sound: False  # simulate scanner noise
+
+
+fixation_cross:
+  inner_radius: 0.2
+  outer_radius: 0.4
+  bg: [1.0, 1.0, 1.0]
+
+stimulus:
+#  type: agathodaimon
+#  set_1: [A, B]
+#  set_2: [J, K]
+#  set_3: [M, N]
+#
+#  set_4: [O, P]
+#  set_5: [W, X]
+#  set_6: [c, e]
+
+  text_height: 3
+  units: deg
+  width: 3
+  height: 3
+  rect_line_width: 10
+  line_width: 10
+  line_color: white
+  x_pos: [-4, 4]
+
+input:
+  response_button_left: z
+  response_button_right: m
+
+text:
+  units: deg
+  height: 1
+  feedback_y_pos: [1.25, -1.25, 0]
+  wrap_width: 25

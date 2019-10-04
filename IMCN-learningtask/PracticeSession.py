@@ -1,89 +1,56 @@
 from exptools2.core.session import Session
-from LearningTrial import LearningTrial
+from LearningTrial import LearningTrial, InstructionTrial, TextTrial, CheckTrial, PracticeTrial
 from LearningStimulus import FixationCross, LearningStimulusSingle
 from psychopy import visual
-import pandas as pd
+from psychopy import core
+from psychopy.visual import TextStim
+from psychopy.event import waitKeys
+from LearningSession import LearningSession
 import numpy as np
+import pandas as pd
 import os
 import os.path as op
 import sys
 
 
-class LearningSession(Session):
+class PracticeSession(LearningSession):
 
     def __init__(self, index_number, output_str, output_dir, settings_file,
-                 start_block, debug=False, scanner=False):
-        super(LearningSession, self).__init__(output_str=output_str,
+                 start_block):
+        super(PracticeSession, self).__init__(index_number=index_number,
+                                              start_block=start_block,
+                                              output_str=output_str + '_practice',
                                               output_dir=output_dir,
-                                              settings_file=settings_file)
+                                              settings_file=settings_file,
+                                              debug=False,
+                                              scanner=False)
 
-        self.index_number = index_number  # participant number
-        self.start_block = start_block    # allows for starting at a later block than 1
-        self.debug = debug
-        self.in_scanner = scanner
-        self.design = None
-        self.p_wins = None
-        self.trials = None
-        self.stimuli = None
-        self.fixation_cross = None
-        self.total_points = 0
-        self.total_trials = 0
-
-        self.response_button_signs = [self.settings['input']['response_button_left'],
-                                      self.settings['input']['response_button_right']]
-
-        # note that all these durations are default values and can and should be overwritten before each trial
-        self.phase_durations = np.array([1,     # phase 0: fix cross1 (ITI pretrial)
-                                         1,     # phase 1: cue
-                                         1,     # phase 2: fix cross2
-                                         2,     # phase 3: stimulus
-                                         0.5,   # phase 4: choice highlight
-                                         0.5,   # phase 5: feedback
-                                         1      # phase 6: fix cross3 (ITI posttrial)
-                                         ])
-        self.phase_names = ['fix_cross_1', 'cue', 'fix_cross_2', 'stimulus', 'highlight', 'feedback', 'iti']
-
-    def load_design(self):
-
-        # if self.practice:
-        #     fn = 'sub-PRACTICE_design'
-        if self.debug:
-            fn = 'sub-DEBUG_design'
-        else:
-            fn = 'sub-' + str(self.index_number).zfill(2) + '_design'
-
-        self.design = pd.read_csv(os.path.join('designs', fn + '.csv'), sep='\t', index_col=False)
-        self.p_wins = self.design.p_win_correct.unique()
-
-        # For practice sessions, we want to annotate some stuff but only in the first three trials per block (?)
-        # self.design['annotate'] = False
-        # if self.practice:
-        #     for block in [1, 4]:
-        #         idx = self.design.block == block
-        #         idx = (np.cumsum(idx) > 0) & (np.cumsum(idx) < 2)  # run only the first trial annotated
-        #         self.design.loc[idx, 'annotate'] = True
-
-    def estimate_bonus(self, return_final=False):
-        """
-        simple linear combination
-        y = a*x + b
-        a = 10/max_points
-        b = -10/2
-        """
-
-        if return_final:
-            # n points if *always* chosen the right answer, based on *all* trials
-            max_points = self.design.shape[0] * np.mean(self.p_wins) * 100.
-        else:
-            # expected n points if *always* chosen the right answer, based on the number of trials so far
-            max_points = self.total_trials * np.mean(self.p_wins) * 100.
-        n_moneys = self.total_points * (10. / max_points) - 10 / 2.
-        n_moneys_capped = np.min([np.max([n_moneys, 0]), 5])  # cap at [0, 5]
-
-        if return_final:
-            return max_points, n_moneys_capped
-        else:
-            return n_moneys_capped
+        self.start_location = start_block
+        # self.index_number = index_number  # participant number
+        # self.start_block = start_block    # allows for starting at a later block than 1
+        # self.debug = debug
+        # self.in_scanner = scanner
+        # self.design = None
+        # self.p_wins = None
+        # self.trials = None
+        # self.stimuli = None
+        # self.fixation_cross = None
+        # self.total_points = 0
+        # self.total_trials = 0
+        #
+        # self.response_button_signs = [self.settings['input']['response_button_left'],
+        #                               self.settings['input']['response_button_right']]
+        #
+        # # note that all these durations are default values and can and should be overwritten before each trial
+        # self.phase_durations = np.array([1,     # phase 0: fix cross1 (ITI pretrial)
+        #                                  1,     # phase 1: cue
+        #                                  1,     # phase 2: fix cross2
+        #                                  2,     # phase 3: stimulus
+        #                                  0.5,   # phase 4: choice highlight
+        #                                  0.5,   # phase 5: feedback
+        #                                  1      # phase 6: fix cross3 (ITI posttrial)
+        #                                  ])
+        # self.phase_names = ['fix_cross_1', 'cue', 'fix_cross_2', 'stimulus', 'highlight', 'feedback', 'iti']
 
     def prepare_objects(self):
         """
@@ -92,274 +59,423 @@ class LearningSession(Session):
 
         settings = self.settings
 
-        # Fixation cross
-        self.fixation_cross = FixationCross(self.win,
-                                            outer_radius=settings['fixation_cross']['outer_radius'],
-                                            inner_radius=settings['fixation_cross']['inner_radius'],
-                                            bg=settings['fixation_cross']['bg'])
-        self.default_fix = self.fixation_cross  # overwrite
+        self.continue_instruction = TextStim(self.win, text='Press <space bar> to continue',
+                                             italic=True, pos=(0, -6))
+        self.back_instruction = TextStim(self.win, text='Press <backspace> to go back',
+                                         italic=True, pos=(0, -7))
 
-        # checkout if stimulus type is interpreted
-        # if not settings['stimulus']['type'] in ['agathodaimon']:
-        #     raise(IOError('No idea what stimulus type I should draw. '
-        #                   'You entered %s' % settings['stimulus']['type']))
-        # checkout if colors exist
-        # if settings['stimulus']['type'] == 'colors':
-        #     import matplotlib.colors as mcolors
-        #     for set_n in ['set_1', 'set_2', 'set_3']:
-        #         for col in settings['stimulus'][set_n]:
-        #             if not col in mcolors.CSS4_COLORS.keys():
-        #                 raise(IOError('I dont understand color %s that was '
-        #                               'provided to stimulus set %s...' %(col, set_n)))
+        all_symbols = ['a', 'b', 'c', 'd', 'x', 'y']
+        self.design = pd.DataFrame({'stim_high': all_symbols,
+                                    'stim_low': all_symbols})
 
-        # load all possible stimuli
-        # all_stim = []
-        # for set_n in range(10):
-        #     # assume a maximum of 10 sets, bit arbitrary but seems enough
-        #     if config.has_option('stimulus', 'set_%d' % set_n):
-        #         all_stim.append(config.get('stimulus', 'set_%d' % set_n))
-        #
-        # if counterbalance:
-        #     # counterbalance, based on index_num
-        #     ###### WARNING: This is set-up to be specific for my experiment #######
-        #     all_stim = self.counterbalance_stimuli(all_stim)
+        super(PracticeSession, self).prepare_objects()
 
-        # let's find all stimuli first from dataframe
-        all_stimuli = np.unique(np.hstack([self.design.stim_high.unique(), self.design.stim_low.unique()]))
+    def display_wait_text(self, text, stims_to_draw, text_per_line=None, keys=None, duration=None, **kwargs):
+        """ Displays a slightly more complex text """
 
-        self.stimuli = {'left': {}, 'right': {}}
-        for stimulus in all_stimuli:
-            for i, location in enumerate(['left', 'right']):
-                self.stimuli[location][stimulus] = LearningStimulusSingle(
-                    win=self.win,
-                    stimulus=stimulus,
-                    stimulus_type='agathodaimon',
-                    width=settings['stimulus']['width'],
-                    height=settings['stimulus']['height'],
-                    text_height=settings['stimulus']['text_height'],
-                    units=settings['stimulus']['units'],
-                    x_pos=settings['stimulus']['x_pos'][i],
-                    rect_line_width=settings['stimulus']['rect_line_width'])
+        if text_per_line is not None:
+            for text_nr, text_ in enumerate(text_per_line):
+                stim = TextStim(win=self.win, text=text_, pos=(0, 3-text_nr), wrapWidth=500, units='deg',
+                                alignVert='top')
+                stims_to_draw.append(stim)
 
-        # # Stimuli
-        # self.stimuli = []
-        # for stim in all_stim:
-        #     self.stimuli.append(
-        #         LearningStimulus(self.screen,
-        #                          stimulus_type=config.get('stimulus', 'type'),
-        #                          width=config.get('stimulus', 'width'),
-        #                          height=config.get('stimulus', 'height'),
-        #                          set=stim,
-        #                          text_height=config.get('stimulus', 'text_height'),
-        #                          units=config.get('stimulus', 'units'),
-        #                          x_pos=config.get('stimulus', 'x_pos'),
-        #                          rect_line_width=config.get('stimulus', 'rect_line_width')))
+        for stim in stims_to_draw:
+            stim.draw()
 
-        # load instruction screen pdfs
-        self.instruction_screens = [
-            visual.ImageStim(self.win, image='./lib/vanilla.png'),
-            visual.ImageStim(self.win, image='./lib/sat.png')
-        ]
+        self.display_text(text=text, keys=keys, duration=duration, **kwargs)
 
-        # Prepare feedback stimuli. Rendering of text is supposedly slow so better to do this once only (not every
-        # trial)
-        # 1. Feedback on outcomes
-        self.feedback_outcome_objects = [
-            visual.TextStim(win=self.win, text='Outcome: 0',  color='darkred',
-                            units=self.settings['text']['units'],
-                            height=self.settings['text']['height'],
-                            pos=(0, self.settings['text']['feedback_y_pos'][0])),
-            visual.TextStim(win=self.win, text='Outcome: +100', color='darkgreen',
-                            units=self.settings['text']['units'],
-                            height=self.settings['text']['height'],
-                            pos=(0, self.settings['text']['feedback_y_pos'][0])),
-            visual.TextStim(win=self.win, text='No choice made', color='darkred',
-                            units=self.settings['text']['units'],
-                            height=self.settings['text']['height'],
-                            pos=(0, self.settings['text']['feedback_y_pos'][0])),
-        ]
-        # 2. Feedback on earnings
-        self.feedback_earnings_objects = [
-            visual.TextStim(win=self.win, text='Reward: 0', color='darkred',
-                            units=self.settings['text']['units'],
-                            height=self.settings['text']['height'],
-                            pos=(0, self.settings['text']['feedback_y_pos'][1])),
-            visual.TextStim(win=self.win, text='Reward: +100', color='darkgreen',
-                            units=self.settings['text']['units'],
-                            height=self.settings['text']['height'],
-                            pos=(0, self.settings['text']['feedback_y_pos'][1])),
-            visual.TextStim(win=self.win, text='Reward: -100', color='darkred',
-                            units=self.settings['text']['units'],
-                            height=self.settings['text']['height'],
-                            pos=(0, self.settings['text']['feedback_y_pos'][1])),
-        ]
-        # 3. Feedback on timing
-        self.feedback_timing_objects = [
-            visual.TextStim(win=self.win, text='Too slow!', color='darkred',
-                            units=self.settings['text']['units'],
-                            height=self.settings['text']['height'],
-                            pos=(0, self.settings['text']['feedback_y_pos'][2])),
-            visual.TextStim(win=self.win, text='Too fast!', color='darkred',
-                            units=self.settings['text']['units'],
-                            height=self.settings['text']['height'],
-                            pos=(0, self.settings['text']['feedback_y_pos'][2]))]
+    def generate_text_objects(self, text_per_line, degrees_per_line=1, bottom_pos=3,
+                              wrapWidth=100, **kwargs):
 
-        # Prepare cue texts. Rendering of text is supposedly slow so better to do this once only (not every
-        # trial)
-        self.cues = [
-            # 0 = SPD
-            visual.TextStim(win=self.win, text="SPD",
-                            units=settings['text']['units'],
-                            height=settings['text']['height']),
+        text_objects = []
+        for i, text in enumerate(text_per_line):
+            text_objects.append(visual.TextStim(self.win, text=text, pos=(0, bottom_pos-i*degrees_per_line),
+                                                alignVert='bottom', wrapWidth=wrapWidth, **kwargs))
 
-            # 1 = ACC
-            visual.TextStim(win=self.win, text="ACC",
-                            units=settings['text']['units'],
-                            height=settings['text']['height']),
-        ]
+        return text_objects
 
-        # Waiting for scanner screen
-        self.scanner_wait_screen = visual.TextStim(win=self.win,
-                                                   text='Waiting for scanner...',
-                                                   name='scanner_wait_screen',
-                                                   units=settings['text']['units'],
-                                                   height=settings['text']['height'],
-                                                   font='Helvetica Neue', pos=(0, 0),
-                                                   italic=True,
-                                                   alignHoriz='center')
+    def get_random_cue_location(self, symbols, ps):
 
-        if self.debug:
-             pos = -settings['window']['size'][0]/3, settings['window']['size'][1]/3
-             self.debug_txt = visual.TextStim(win=self.win,
-                                              alignVert='top',
-                                              text='debug mode\n',
-                                              name='debug_txt',
-                                              units='pix',  # config.get('text', 'units'),
-                                              font='Helvetica Neue',
-                                              pos=pos,
-                                              height=14,  # config.get('text', 'height'),
-                                              alignHoriz='center')
+        stim_out = [symbols[0], symbols[1]]
+        p_out = [ps[0], ps[1]]
+        cue_out = 'SPD'
+        if np.random.sample() < .5:
+            stim_out = [symbols[1], symbols[0]]
+            p_out = [ps[1], ps[0]]
+        if np.random.sample() < .5:
+            cue_out = 'ACC'
 
-    def save_data(self, block_nr=None):
+        return stim_out, p_out, cue_out
 
-        global_log = pd.DataFrame(self.global_log).set_index('trial_nr').copy()
-        global_log['onset_abs'] = global_log['onset'] + self.exp_start
+    def get_jittered_durations(self):
 
-        # Only non-responses have a duration
-        nonresp_idx = ~global_log.event_type.isin(['response', 'trigger', 'pulse'])
-        last_phase_onset = global_log.loc[nonresp_idx, 'onset'].iloc[-1]
+        durations = np.zeros(7)
+        durations[0] = np.random.choice([.5, 1.25, 2])
+        durations[1] = 1 + np.random.choice([.5, 1.25, 2])
+        durations[2] = np.random.choice([.5, 1.25, 2])
+        durations[3] = 1.5 + np.random.choice([0, .5, 1.25])
+        durations[4] = 1 + np.random.choice([0, .5, 1.25])
+        durations[5] = 1 + np.random.choice([0, .5, 1.25])
+        durations[6] = np.random.choice([0, .5, 1.25])
 
-        if block_nr is None:
-            dur_last_phase = self.exp_stop - last_phase_onset
-        else:
-            dur_last_phase = self.clock.getTime() - last_phase_onset
-        durations = np.append(global_log.loc[nonresp_idx, 'onset'].diff().values[1:], dur_last_phase)
-        global_log.loc[nonresp_idx, 'duration'] = durations
-
-        # Same for nr frames
-        nr_frames = np.append(global_log.loc[nonresp_idx, 'nr_frames'].values[1:], self.nr_frames)
-        global_log.loc[nonresp_idx, 'nr_frames'] = nr_frames.astype(int)
-
-        # Round for readability and save to disk
-        global_log = global_log.round({'onset': 5, 'onset_abs': 5, 'duration': 5})
-
-        if block_nr is None:
-            f_out = op.join(self.output_dir, self.output_str + '_events.tsv')
-        else:
-            f_out = op.join(self.output_dir, self.output_str + '_block-' + str(block_nr) + '_events.tsv')
-        global_log.to_csv(f_out, sep='\t', index=True)
-
-        # Save frame intervals to file
-        self.win.saveFrameIntervals(fileName=f_out.replace('_events.tsv', '_frameintervals.log'), clear=False)
-
-    def close(self):
-        """ 'Closes' experiment. Should always be called, even when
-        experiment is quit manually (saves onsets to file). """
-
-        if self.closed:  # already closed!
-            return None
-
-        self.win.callOnFlip(self._set_exp_stop)
-        self.win.flip()
-        self.win.recordFrameIntervals = False
-
-        print(f"\nDuration experiment: {self.exp_stop:.3f}\n")
-
-        if not op.isdir(self.output_dir):
-            os.makedirs(self.output_dir)
-
-        # points = self.total_points
-        # max_points, bonus = self.estimate_bonus(return_final=True)
-        # print('Total points: %d (maximum: %d), total bonus earned: %.3f' % (points, max_points, bonus))
-
-        self.save_data()
-
-        # Create figure with frametimes (to check for dropped frames)
-        # fig, ax = plt.subplots(figsize=(15, 5))
-        # ax.plot(self.win.frameIntervals)
-        # ax.axhline(1. / self.actual_framerate, c='r')
-        # ax.axhline(1. / self.actual_framerate + 1. / self.actual_framerate, c='r', ls='--')
-        # ax.set(xlim=(0, len(self.win.frameIntervals) + 1), xlabel='Frame nr', ylabel='Interval (sec.)',
-        #        ylim=(-0.1, 0.5))
-        # fig.savefig(op.join(self.output_dir, self.output_str + '_frames.png'))
-
-        if self.mri_simulator is not None:
-            self.mri_simulator.stop()
-
-        self.win.close()
-        self.closed = True
-
-    def create_trials(self, block_nr):
-        this_block_design = self.design.loc[self.design.block == block_nr]
-        self.trials = []
-
-        for index, row in this_block_design.iterrows():
-            this_trial_parameters = {'stimulus_symbol_left': row['stim_left'],
-                                     'stimulus_symbol_right': row['stim_right'],
-                                     'correct_response': row['correct_stim_lr'],
-                                     'block_nr': block_nr,
-                                     'p_win_left': row['p_win_left'],
-                                     'p_win_right': row['p_win_right'],
-                                     'cue': row['cue_txt']}
-            phase_durations = [row['iti_pretrial'],
-                               row['cue'],
-                               row['fix_cross'],
-                               row['stimulus'],
-                               row['highlight'],
-                               row['feedback'],
-                               row['iti_posttrial']]
-
-            self.trials.append(LearningTrial(trial_nr=int(index),
-                                             parameters=this_trial_parameters,
-                                             phase_durations=phase_durations,
-                                             phase_names=self.phase_names,
-                                             session=self))
+        return durations
 
     def run(self):
         """ Runs this Instrumental Learning task"""
 
-        self.load_design()
+        # self.load_design()
         self.prepare_objects()
+        self.start_experiment()
 
-        # remove blocks before start_block
-        all_blocks = np.unique(self.design.block)
-        all_blocks = all_blocks[self.start_block-1:]  # assuming start_block is 1-coded
+        self.display_wait_text(text='Welcome to this practice session!', keys='space',
+                               stims_to_draw=[self.continue_instruction], pos=(0, 3))
 
-        for block_nr in all_blocks:
-            self.create_trials(block_nr)
+        self.display_wait_text(text=' ',
+                               text_per_line=['It is important that you understand the task well.',
+                                              'Please read these instructions carefully, ',
+                                              'and do not hesitate to ask any questions if anything is unclear'],
+                               keys='space',
+                               stims_to_draw=[self.continue_instruction], pos=(0, 3))
 
-            if self.exp_start is None:
-                self.start_experiment()
+        continue_back = [self.continue_instruction, self.back_instruction]
+        continue_only = [self.continue_instruction]
+        loop_1_done = False
+        loop_2_done = False
+        answer_1_checked = False
+        answer_2_checked = False
+        session_location = self.start_location
+        trial_nr = 0
+        while True:
+            if session_location == 0:
+                next_texts = self.generate_text_objects(['You will see two choice options, such as these'])
+                tr = TextTrial(trial_nr=trial_nr,
+                               parameters={},
+                               phase_durations=[60],
+                               decoration_objects=[self.stimuli['left']['a'], self.stimuli['right']['b']] +
+                                                  next_texts + continue_only,
+                               session=self)
+                tr.run()
+            elif session_location == 1:
+                next_texts = self.generate_text_objects(['These act like slot machines in a casino',
+                                                         'On every attempt, you have a chance to get a reward'])
+                tr = TextTrial(trial_nr=trial_nr,
+                               parameters={},
+                               phase_durations=[60],
+                               decoration_objects=[self.stimuli['left']['a'], self.stimuli['right']['b']] +
+                                                  next_texts + continue_back,
+                               session=self)
+                tr.run()
+            elif session_location == 2:
+                next_texts = self.generate_text_objects(
+                    ['The probability of getting a reward differs per symbol',
+                     'You need to discover, by trial and error, which symbol',
+                     'has a higher chance of giving a reward'],
+                    bottom_pos=4)
+                tr = TextTrial(trial_nr=trial_nr,
+                               parameters={},
+                               phase_durations=[60],
+                               decoration_objects=[self.stimuli['left']['a'], self.stimuli['right']['b']] +
+                                                  next_texts + continue_back,
+                               session=self)
+                tr.run()
+            elif session_location == 3:
+                next_texts = self.generate_text_objects(
+                    ['Let\'s practice this for a bit to give you a feeling how this works!',
+                     'Make a couple choices by pressing <z> for left or <m> for right',
+                     'After every choice, you will see whether you got a reward (+100) or '
+                     'not (+0)'],
+                    bottom_pos=5)
+                move_on_text = [
+                    visual.TextStim(win=self.win, text='When you think you know which symbol has the highest '
+                                                       'probability of giving a reward, press <space bar>',
+                                    italic=True, pos=(0, -6), wrapWidth=100)]
 
-            self.display_text('Waiting for scanner', keys=self.mri_trigger)
-            self.timer.reset()
+                if not loop_1_done:
+                    for _ in range(10):
+                        tr = InstructionTrial(trial_nr=trial_nr,
+                                              parameters={'cue': '',  # for compatibility
+                                                          'block_nr': session_location,  # for compatibility
+                                                          'stimulus_symbol_left': 'a',
+                                                          'stimulus_symbol_right': 'b',
+                                                          'p_win_left': 0.8,
+                                                          'p_win_right': 0.2},
+                                              phase_durations=[0.000, 0.000, 0.000, 60, 1, 1, 0],
+                                              phase_names=self.phase_names,
+                                              session=self,
+                                              decoration_objects=next_texts)
+                        tr.run()
+                        trial_nr += 1
+                    loop_1_done = True
 
-            # loop over trials
-            for trial in self.trials:
-                trial.run()
+                while True:
+                    tr = InstructionTrial(trial_nr=trial_nr,
+                                          parameters={'cue': '',  # for compatibility
+                                                      'block_nr': session_location,  # for compatibility
+                                                      'stimulus_symbol_left': 'a',
+                                                      'stimulus_symbol_right': 'b',
+                                                      'p_win_left': 0.8,
+                                                      'p_win_right': 0.2},
+                                          phase_durations=[0.000, 0.000, 0.000, 60, 1, 1, 0],
+                                          phase_names=self.phase_names,
+                                          session=self,
+                                          decoration_objects=next_texts + move_on_text,
+                                          allow_space_break=True)
+                    tr.run()
+                    trial_nr += 1
 
-            # save data
-            self.save_data(block_nr=block_nr)
+                    if tr.last_key is not None:
+                        print('Not none found')
+                        if tr.last_key == 'space':
+                            print('I should break')
+                            break
+
+                # check correct here, give feedback
+                if not answer_1_checked:
+                    next_texts = self.generate_text_objects(
+                        ['Which symbol is more likely to give a reward?'],
+                        bottom_pos=5)
+                    tr = CheckTrial(trial_nr=trial_nr,
+                                    parameters={'cue': '',  # for compatibility
+                                                'block_nr': session_location,  # for compatibility
+                                                'stimulus_symbol_left': 'a',
+                                                'stimulus_symbol_right': 'b',
+                                                'p_win_left': 0.8,
+                                                'p_win_right': 0.2},
+                                    phase_durations=[0.000, 0.000, 0.000, 60, 0, 60, 0],
+                                    phase_names=self.phase_names,
+                                    session=self,
+                                    decoration_objects=next_texts,
+                                    allow_space_break=True)
+                    tr.run()
+                    answer_1_checked = True
+                    print(tr.last_key)
+                    # tr.last_key = 'space'
+
+            elif session_location == 4:
+                next_texts = self.generate_text_objects(
+                    ['It\'s important to realise that:',
+                     '- The low probability symbol *sometimes* gives a reward,\n'
+                     'so you could be wrong even if you got a reward for a choice',
+                     '- The high probability symbol *not always* gives a reward,\n'
+                     'so you could be right even if you did not get a reward for a choice',
+                     'You will thus need to balance between committing to one symbol, '
+                     'and exploring both symbols'],
+                    bottom_pos=5, degrees_per_line=3)
+                tr = TextTrial(trial_nr=trial_nr,
+                               parameters={},
+                               phase_durations=[60],
+                               decoration_objects=next_texts + continue_only,
+                               session=self)
+                tr.run()
+
+            elif session_location == 5:
+                next_texts = self.generate_text_objects(
+                    ['Let\'s try again with new symbols. It\'s more difficult now',
+                     'and the location of the symbols will alternate randomly',
+                     'Make a couple of decisions by pressing <z> for left or <m> for right'],
+                    bottom_pos=5)
+
+                if not loop_2_done:
+                    for _ in range(10):
+                        symbols, ps, _ = self.get_random_cue_location(ps=[0.65, 0.35], symbols=['c', 'd'])
+                        tr = InstructionTrial(trial_nr=trial_nr,
+                                              parameters={'cue': '',      # for compatibility
+                                                          'block_nr': session_location,  # for compatibility
+                                                          'stimulus_symbol_left': symbols[0],
+                                                          'stimulus_symbol_right': symbols[1],
+                                                          'p_win_left': ps[0],
+                                                          'p_win_right': ps[1]},
+                                              phase_durations=[0.000, 0.000, 0.000, 60, 1, 1, 0],
+                                              phase_names=self.phase_names,
+                                              session=self,
+                                              decoration_objects=next_texts)
+                        tr.run()
+                        trial_nr += 1
+
+                    loop_2_done = True
+
+                while True:
+                    symbols, ps, _ = self.get_random_cue_location(ps=[0.65, 0.35], symbols=['c', 'd'])
+                    tr = InstructionTrial(trial_nr=trial_nr,
+                                          parameters={'cue': '',  # for compatibility
+                                                      'block_nr': session_location,
+                                                      'stimulus_symbol_left': symbols[0],
+                                                      'stimulus_symbol_right': symbols[1],
+                                                      'p_win_left': ps[0],
+                                                      'p_win_right': ps[1]},
+                                          phase_durations=[0.000, 0.000, 0.000, 60, 1, 1, 0],
+                                          phase_names=self.phase_names,
+                                          session=self,
+                                          decoration_objects=next_texts + move_on_text,
+                                          allow_space_break=True)
+                    tr.run()
+                    trial_nr += 1
+
+                    if tr.last_key is not None:
+                        print('Not none found')
+                        if tr.last_key == 'space':
+                            print('I should break')
+                            break
+
+                # check correct here, give feedback
+                if not answer_2_checked:
+                    next_texts = self.generate_text_objects(
+                        ['Which symbol is more likely to give a reward??'],
+                        bottom_pos=5)
+                    tr = CheckTrial(trial_nr=trial_nr,
+                                    parameters={'cue': '',      # for compatibility
+                                                'block_nr': session_location,  # for compatibility
+                                                'stimulus_symbol_left': 'c',
+                                                'stimulus_symbol_right': 'd',
+                                                'p_win_left': 0.8,
+                                                'p_win_right': 0.2},
+                                    phase_durations=[0.000, 0.000, 0.000, 60, 0, 60, 0],
+                                    phase_names=self.phase_names,
+                                    session=self,
+                                    decoration_objects=next_texts,
+                                    allow_space_break=True)
+                    tr.run()
+                    answer_2_checked = True
+                    print(tr.last_key)
+                    # tr.last_key = 'space'
+
+            elif session_location == 6:
+                next_texts = self.generate_text_objects(
+                    ['Alright, well done so far!',
+                     'The next aspect of the task are the *cues*'],
+                    bottom_pos=5, degrees_per_line=3)
+                tr = TextTrial(trial_nr=trial_nr,
+                               parameters={},
+                               phase_durations=[60],
+                               decoration_objects=next_texts + continue_only,
+                               session=self)
+                tr.run()
+
+            elif session_location == 7:
+                next_texts = self.generate_text_objects(
+                    ['Cues instruct you, before each trial, how fast you should respond',
+                     '',
+                     'If you see "SPD" (for \'speed\'), you need to respond *quickly*:',
+                     'You need to respond fast, even if you make some more mistakes in your choices',
+                     '',
+                     'If you see "ACC" (for \'accuracy\'), you need to respond *accurately*:',
+                     'You need to make the correct choice, even if that takes a little bit longer'],
+                    bottom_pos=5, degrees_per_line=1)
+                tr = TextTrial(trial_nr=trial_nr,
+                               parameters={},
+                               phase_durations=[60],
+                               decoration_objects=next_texts + continue_back,
+                               session=self)
+                tr.run()
+
+            elif session_location == 8:
+                next_texts = self.generate_text_objects(
+                    ['Following the SPD / ACC cues is important!',
+                     'If you see "SPD" but respond too slowly, you *lose* points',
+                     'Only if you respond fast, you earn the outcome of the choice (+100 or +0)',
+                     '',
+                     'If you see "ACC" but make an incorrect response, you are less likely to earn points',
+                     'Taking a bit more time to make the correct choice will lead to more points'],
+                    bottom_pos=5, degrees_per_line=1)
+                tr = TextTrial(trial_nr=trial_nr,
+                               parameters={},
+                               phase_durations=[60],
+                               decoration_objects=next_texts + continue_back,
+                               session=self)
+                tr.run()
+
+            elif session_location == 9:
+                next_texts = self.generate_text_objects(
+                    ['Let\'s try and see how this works!'],
+                    bottom_pos=5, degrees_per_line=1)
+                tr = TextTrial(trial_nr=trial_nr,
+                               parameters={},
+                               phase_durations=[60],
+                               decoration_objects=next_texts + continue_back,
+                               session=self)
+                tr.run()
+
+            elif session_location == 10:
+
+                tr = PracticeTrial(trial_nr=trial_nr,
+                                   parameters={'cue': 'ACC',
+                                               'block_nr': session_location,
+                                               'stimulus_symbol_left': 'x',
+                                               'stimulus_symbol_right': 'y',
+                                               'p_win_left': 1,
+                                               'p_win_right': 1},
+                                   phase_durations=[60, 60, 0, 60, 60, 60, 0, 60, 60],
+                                   phase_names=self.phase_names + ['feedback_2', 'feedback_3'],
+                                   # decoration_objects=next_texts + continue_back,
+                                   session=self)
+                tr.run()
+
+            elif session_location == 11:
+                next_texts = self.generate_text_objects(
+                    ['Let\'s now practice this for real! When you press space bar,',
+                     'a short practice block of 15 trials starts'],
+                    bottom_pos=5, degrees_per_line=1)
+                tr = TextTrial(trial_nr=trial_nr,
+                               parameters={},
+                               phase_durations=[60],
+                               decoration_objects=next_texts + continue_back,
+                               session=self)
+                tr.run()
+                trial_nr += 1
+
+                for i in range(15):
+                    symbols, ps, cue = self.get_random_cue_location(ps=[0.75, 0.25], symbols=['x', 'y'])
+
+                    tr = LearningTrial(trial_nr=trial_nr,
+                                       parameters={'cue': cue,
+                                                   'block_nr': session_location,
+                                                   'stimulus_symbol_left': symbols[0],
+                                                   'stimulus_symbol_right': symbols[1],
+                                                   'p_win_left': ps[0],
+                                                   'p_win_right': ps[1]},
+                                       phase_durations=self.get_jittered_durations(),
+                                       phase_names=self.phase_names,
+                                       session=self)
+                    tr.run()
+                    trial_nr += 1
+
+            trial_nr += 1
+            if tr.last_key == 'space':
+                session_location += 1
+            elif tr.last_key == 'backspace':
+                session_location -= 1
+
+            if session_location == 12:
+                break
+
+        self.close()
+        self.quit()
+
+
+
+
+
+
+
+        # # remove blocks before start_block
+        # all_blocks = np.unique(self.design.block)
+        # all_blocks = all_blocks[self.start_block-1:]  # assuming start_block is 1-coded
+        #
+        # for block_nr in all_blocks:
+        #     self.create_trials(block_nr)
+        #
+        #     if self.exp_start is None:
+        #         self.start_experiment()
+        #
+        #     self.display_text('Waiting for scanner', keys=self.mri_trigger)
+        #     self.timer.reset()
+        #
+        #     # loop over trials
+        #     for trial in self.trials:
+        #         trial.run()
+        #
+        #     # save data
+        #     self.save_data(block_nr=block_nr)
 
         self.close()
         self.quit()
@@ -367,28 +483,28 @@ class LearningSession(Session):
 
 if __name__ == '__main__':
 
+
+
     import datetime
     index_number = 1
-    start_block = 1
+    start_block = 10
     scanner = False
     simulate = 'y'
     debug = True
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%m%S")
-    output_str = f'sub-{index_number}_task-learning_datetime-{timestamp}'
+    output_str = f'sub-{index_number}_task-practice-learning_datetime-{timestamp}'
     output_dir = './data'
     if simulate == 'y':
         settings_file = '/Users/steven/Sync/PhDprojects/IMCN-learningtask/IMCN-learningtask/settings_simulate.yml'
     else:
         settings_file = '/Users/steven/Sync/PhDprojects/IMCN-learningtask/IMCN-learningtask/settings.yml'
 
-    sess = LearningSession(scanner=scanner,
+    sess = PracticeSession(index_number=index_number,
                            output_str=output_str,
                            output_dir=output_dir,
                            settings_file=settings_file,
-                           start_block=start_block,
-                           debug=debug,
-                           index_number=index_number)
+                           start_block=start_block)
     sess.run()
 
 # if __name__ == '__main__':

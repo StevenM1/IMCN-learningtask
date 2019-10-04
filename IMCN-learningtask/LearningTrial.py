@@ -1,176 +1,123 @@
-from exptools.core.trial import MRITrial
-from exptools.core.session import MRISession
+from exptools2.core.trial import Trial
 from psychopy import event, visual
 import numpy as np
-import os
 
 
-class LearningTrial(MRITrial):
+class LearningTrial(Trial):
 
-    def __init__(self, ID, parameters, phase_durations, session=None, screen=None, tracker=None):
-        super(LearningTrial, self).__init__(parameters=parameters,
+    def __init__(self, trial_nr, parameters, phase_durations, phase_names=None,
+                 session=None):
+        super(LearningTrial, self).__init__(trial_nr=trial_nr,
+                                            parameters=parameters,
                                             phase_durations=phase_durations,
-                                            session=session,
-                                            screen=screen,
-                                            tracker=tracker)
-
-        self.trs_recorded = 0
-        self.ID = ID
+                                            phase_names=phase_names,
+                                            session=session)
+        self.trial_nr = trial_nr
         self.parameters = parameters
-        self.won = None
-
-        self.testtext = visual.TextStim(win=self.screen, text='bla', pos=(10,0))
+        self.choice_outcome = None
+        self.highlights_reset = False
 
         # set-up response options / dict
         self.response_measured = False  # Has the pp responded yet?
         self.response = {}
-        self.response['button'] = None
+        self.response['choice_key'] = None
         self.response['rt'] = None
-        self.response['side'] = None
-        # self.response['accuracy'] = None
+        self.response['direction'] = None
         self.response['too_slow'] = None
         self.response['too_fast'] = None
         self.response['in_time'] = None
 
         # Select stimulus
-        self.stim = [self.session.stimuli['left'][parameters['stim_left']],
-                     self.session.stimuli['right'][parameters['stim_right']]]
-
-        # self.stim = self.session.stimuli[parameters['stimulus_set']]
-        self.stim[0].selected = False  # make sure to reset so the highlighting rectangle from previous trial doesnt
-        # get drawn
-        self.stim[1].selected = False  # make sure to reset
+        self.stim = [self.session.stimuli['left'][parameters['stimulus_symbol_left']],
+                     self.session.stimuli['right'][parameters['stimulus_symbol_right']]]
 
         # Select feedback
         self.points_earned = 0
         self.current_feedback = [
-            self.session.feedback_outcome_objects[2],  # no choice made
+            self.session.feedback_outcome_objects[2],   # no choice made
             self.session.feedback_earnings_objects[0],  # no points earned
         ]
-#        self.current_feedback = self.session.feedback_text_objects[0]  # default feedback (no response) is 'too slow'
 
         # Select cue, define deadline
         if parameters['cue'] == 'SPD':
             self.current_cue = self.session.cues[0]
+            # TODO change this to a fixed deadline?
             # sample deadline for this trial from cumulative exponential distribution, parameterized by scale=1/2.5
             # and loc = 0.75.
             # note that the maximum deadline is always 2s
-            self.deadline = np.min([np.random.exponential(scale=1/2.5)+.75, 2])
+            self.deadline = 0.5   # np.min([np.random.exponential(scale=1/2.5)+.75, 2])
         elif parameters['cue'] == 'ACC':
             self.current_cue = self.session.cues[1]
-            self.deadline = self.phase_durations[4]
+            self.deadline = self.phase_durations[3]
         else:
             self.current_cue = None
-            self.deadline = self.phase_durations[4]
+            self.deadline = self.phase_durations[3]
 
-        # initialize times
-        self.t_time = self.jitter_time_1 = self.cue_time = self.jitter_time_2 = self.stimulus_time = \
-            self.selection_time = self.feedback_time = self.iti_time = -1
-
-    def event(self, ev=None, time=None):
+    def get_events(self):
         """ evs, times can but used to let a child object pass on the evs and times """
 
-        if ev is None:
-            # no ev passed by child, get events here
-            evs = event.getKeys(timeStamped=self.session.clock)
-        else:
-            evs = [(ev, time)]
+        evs = event.getKeys(timeStamped=self.session.clock)
 
-        for ev, time in evs:   # event.getKeys(timeStamped=self.session.clock):
+        for ev, time in evs:
             if len(ev) > 0:
+                if ev == 'q':
+                    self.session.close()
+                    self.session.quit()
+                elif ev == 'equal' or ev == '+':
+                    self.stop_trial()
 
-                # Quit experiment?
-                if ev in ['esc', 'escape']:
-                    self.events.append([-99, time, self.session.clock.getTime() - self.start_time])
-                    self.stopped = True
-                    self.session.stopped = True
-                    print('run canceled by user')
-
-                # Skip trial
-                elif ev == '+' or ev == 'equal':
-                    self.events.append([-99, time, self.session.clock.getTime() - self.start_time])
-                    self.stopped = True
-                    print('trial canceled by user')
+                idx = self.session.global_log.shape[0]
 
                 # TR pulse
-                elif ev == self.session.mri_trigger_key:
-                    self.trs_recorded += 1
-                    if self.phase == 0:
-                        if self.trs_recorded >= self.session.warmup_trs:
-                            if self.parameters['block_trial_ID'] == 0:
-                                # make sure to register this pulse now as the start of the block/run
-                                self.session.block_start_time = time
-
-                    self.events.append([99,
-                                        time,  # absolute time since session start
-                                        time - self.start_time,  # time since trial start
-                                        time - self.session.block_start_time,  # time since block start
-                                        self.ID])  # trial ID seems useful maybe
-
-                    # phase 0 is ended by the MR trigger
-                    if self.phase == 0:
-                        if self.parameters['block_trial_ID'] == 0:
-                            if self.trs_recorded >= self.session.warmup_trs:
-                                self.phase_forward()
-                        else:
-                            self.phase_forward()
-
-                # Response (key press)
+                if ev == self.session.mri_trigger:
+                    event_type = 'pulse'
                 elif ev in self.session.response_button_signs:
-                    self.events.append([ev, time,  # absolute time since start of experiment
-                                        self.session.clock.getTime() - self.start_time,  # time since start of trial
-                                        self.stimulus_time - self.jitter_time_2,  # time since stimulus start
-                                        'key_press'])
-
-                    if self.phase == 4 or self.phase == 5:
+                    event_type = 'response'
+                    if self.phase == 3 or self.phase == 4:
                         if not self.response_measured:
                             self.response_measured = True
-                            self.process_response(ev, time)
+                            self.process_response(ev, time, idx)
 
                             # Not in the MR scanner? End phase upon keypress
-                            if self.session.tr == 0 and self.phase == 4:
-                                self.phase_forward()
+                            if not self.session.in_scanner and self.phase == 3:
+                                self.stop_phase()
+                else:
+                    event_type = 'non_response_keypress'
 
-            super(LearningTrial, self).key_event(ev)
+                # global response handling
+                self.session.global_log.loc[idx, 'trial_nr'] = self.trial_nr
+                self.session.global_log.loc[idx, 'block_nr'] = self.parameters['block_nr']
+                self.session.global_log.loc[idx, 'onset'] = time
+                self.session.global_log.loc[idx, 'event_type'] = event_type
+                self.session.global_log.loc[idx, 'phase'] = self.phase
+                self.session.global_log.loc[idx, 'response'] = ev
 
-    def process_response(self, ev, time):
-        """ Processes a response:
-        - checks if the keypress is correct/incorrect;
-        - checks if the keypress was in time;
-        - Prepares feedback accordingly """
+                for param, val in self.parameters.items():
+                    self.session.global_log.loc[idx, param] = val
 
-        self.response['button'] = ev
-        self.response['rt'] = time - self.jitter_time_2
-        self.response['side'] = np.where(np.array(self.session.response_button_signs) == ev)[0][0]
-#        self.response['accuracy'] = ev == self.parameters['correct_response']
-        self.response['too_slow'] = self.response['rt'] >= self.deadline
-        self.response['too_fast'] = self.response['rt'] <= .1
-        self.response['in_time'] = 0.1 < self.response['rt'] < self.deadline
+                if self.eyetracker_on:  # send msg to eyetracker
+                    msg = f'start_type-{event_type}_trial-{self.trial_nr}_phase-{self.phase}_key-{ev}_time-{time}'
+                    self.session.tracker.sendMessage(msg)
 
-        # highlight correct stimulus before drawing the rectangle
-        self.stim[self.response['side']].selected = True
-        # self.stim.selected = self.response['side']
+                if ev != self.session.mri_trigger:
+                    self.last_resp = ev
+                    self.last_resp_onset = time
 
-        # What is the outcome of the choice?
-        p_choice = self.parameters['p_win'][self.response['side']]  # get probability of winning of current choice
-        self.won = np.random.binomial(1, p_choice, 1)[0]  # did the participant win?
-
-        # if the response was in time, the participant gains the reward
-        if self.response['in_time']:
-            self.points_earned = self.won * 100  # 100 points per win
-
+    def make_feedback_screen(self):
         # set-up feedback: 1. Did the pp win?
         self.current_feedback = []
-        if self.won:
+        if self.choice_outcome:
             self.current_feedback.append(self.session.feedback_outcome_objects[1])
-        elif not self.won:
+        elif not self.choice_outcome:
             self.current_feedback.append(self.session.feedback_outcome_objects[0])
 
         # 2. How many points were actually earned?
-        if self.response['too_slow'] or self.response['too_fast']:
+        if self.response['too_fast']:
             self.current_feedback.append(self.session.feedback_earnings_objects[0])
+        elif self.response['too_slow']:
+            self.current_feedback.append(self.session.feedback_earnings_objects[2])
         else:
-            if self.won:
+            if self.choice_outcome:
                 self.current_feedback.append(self.session.feedback_earnings_objects[1])
             else:
                 self.current_feedback.append(self.session.feedback_earnings_objects[0])
@@ -181,95 +128,67 @@ class LearningTrial(MRITrial):
         if self.response['too_fast']:
             self.current_feedback.append(self.session.feedback_timing_objects[1])
 
-    def run(self):
-        """
-        Runs this trial
-        """
+    def process_response(self, ev, time, idx):
+        """ Processes a response:
+        - checks if the keypress is correct/incorrect;
+        - checks if the keypress was in time;
+        - Prepares feedback accordingly """
 
-        self.start_time = self.session.clock.getTime()
-        if self.tracker:
-            self.tracker.log('trial ' + str(self.ID) + ' started at ' + str(self.start_time))
-            self.tracker.send_command('record_status_message "Trial ' + str(self.ID) + '"')
-        self.events.append('trial ' + str(self.ID) + ' started at ' + str(self.start_time))
+        self.response['choice_key'] = ev
 
-        while not self.stopped:
-            self.run_time = self.session.clock.getTime() - self.start_time
+        # to calculate response time, look up stimulus onset time
+        log = self.session.global_log
+        stim_onset_time = log.loc[(log.trial_nr == self.trial_nr) & (log.event_type == 'stimulus'), 'onset'].values[0]
 
-            # Waits for scanner pulse.
-            if self.phase == 0:
-                self.t_time = self.session.clock.getTime()
-                if not isinstance(self.session, MRISession) or self.session.tr == 0:
-                    self.phase_forward()
+        self.response['rt'] = time - stim_onset_time
+        self.response['direction'] = np.where(np.array(self.session.response_button_signs) == ev)[0][0]
+        self.response['too_slow'] = self.response['rt'] >= self.deadline
+        self.response['too_fast'] = self.response['rt'] <= .1
+        self.response['in_time'] = 0.1 < self.response['rt'] < self.deadline
 
-            # In phase 1, we show fix cross (jittered timing)
-            if self.phase == 1:
-                self.jitter_time_1 = self.session.clock.getTime()
-                if (self.jitter_time_1 - self.t_time) > self.phase_durations[1]:
-                    self.phase_forward()
+        # highlight correct stimulus before drawing the rectangle
+        if self.phase == 3:
+            self.stim[self.response['direction']].selected = True
 
-            # In phase 2, we show the cue (fixed timing)
-            if self.phase == 2:
-                self.cue_time = self.session.clock.getTime()
-                if (self.cue_time - self.jitter_time_1) > self.phase_durations[2]:
-                    self.phase_forward()
+        # What is the outcome of the choice?
+        if self.response['direction'] == 0:
+            p_choice = self.parameters['p_win_left']
+        else:
+            p_choice = self.parameters['p_win_right']
+        self.choice_outcome = np.random.binomial(1, p_choice, 1)[0]  # if participant won, this is 1
 
-            # In phase 3, we show the fixation cross again (jittered timing)
-            if self.phase == 3:
-                self.jitter_time_2 = self.session.clock.getTime()
-                if (self.jitter_time_2 - self.cue_time) > self.phase_durations[3]:
-                    self.phase_forward()
+        # if the response was in time, the participant gains the reward
+        if self.response['in_time']:
+            self.points_earned = self.choice_outcome * 100   # 100 points per win
+        elif self.response['too_slow']:
+            self.points_earned = -100
 
-            # In phase 4, we show the stimulus
-            if self.phase == 4:
-                self.stimulus_time = self.session.clock.getTime()
-                if (self.stimulus_time - self.jitter_time_2) > self.phase_durations[4]:
-                    self.phase_forward()
+        self.make_feedback_screen()
 
-            # In phase 5, we highlight the chosen option
-            if self.phase == 5:
-                self.selection_time = self.session.clock.getTime()
-                if (self.selection_time - self.stimulus_time) > self.phase_durations[5]:
-                    self.phase_forward()
-
-            # In phase 6, we show feedback
-            if self.phase == 6:
-                self.feedback_time = self.session.clock.getTime()
-                if (self.feedback_time - self.selection_time) > self.phase_durations[6]:
-                    self.phase_forward()
-
-            # ITI
-            if self.phase == 7:
-                self.iti_time = self.session.clock.getTime()
-                if (self.iti_time - self.feedback_time) > self.phase_durations[7]:
-                    self.phase_forward()
-                    self.stopped = True
-
-            # events and draw, but only if we haven't stopped yet
-            if not self.stopped:
-                self.event()
-                self.draw()
-
-                # # make screen shots
-                # ss_fn = 'screenshots/trial_%d_phase_%d_set_%d.png' %(self.ID, self.phase, self.parameters[
-                #     'stimulus_set'])
-                # if not os.path.isfile(ss_fn):
-                #     self.screen.getMovieFrame()   # Defaults to front buffer, I.e. what's on screen now.
-                #     self.screen.saveMovieFrames(ss_fn)
-
-        self.stop()
+        self.session.global_log.loc[idx, 'deadline'] = self.deadline
+        self.session.global_log.loc[idx, 'rt'] = self.response['rt']
+        self.session.global_log.loc[idx, 'rt_too_slow'] = self.response['too_slow']
+        self.session.global_log.loc[idx, 'rt_too_fast'] = self.response['too_fast']
+        self.session.global_log.loc[idx, 'rt_in_time'] = self.response['in_time']
+        self.session.global_log.loc[idx, 'choice_key'] = self.response['choice_key']
+        self.session.global_log.loc[idx, 'choice_direction'] = self.response['direction']
+        self.session.global_log.loc[idx, 'choice_outcome'] = self.choice_outcome
+        self.session.global_log.loc[idx, 'total_points_earned'] = self.session.total_points + self.points_earned
 
     def update_debug_txt(self):
 
-        trial = self.ID
+        trial_nr = self.trial_nr
         phase = self.phase
         time = self.session.clock.getTime()
-        trial_start_time = self.start_time
+        trial_start_time = self.start_trial
+        if trial_start_time is None:
+            trial_start_time = 0
         t_start = time - trial_start_time
-        stim = [self.parameters['stim_left'], self.parameters['stim_right']]
-        ps = self.parameters['p_win']
+        stim = [self.parameters['stimulus_symbol_left'], self.parameters['stimulus_symbol_right']]
+        ps = [self.parameters['p_win_left'], self.parameters['p_win_right']]
 
         debug_str = 'Trial: %d\nPhase: %d\nTime since start: %.3fs\nTrial start time: %.3fs\nTime since trial start: %.3fs\nStim set: %s\nPs: [%.1f, %.1f]\nTotal points earned: %d\nDeadline: %.2fs' %(
-        trial, phase, time, trial_start_time, t_start, stim, ps[0], ps[1], self.session.total_points, self.deadline)
+        trial_nr, phase, time, trial_start_time, t_start, stim, ps[0], ps[1], self.session.total_points, self.deadline)
         resp_str = "\n".join(("{}: {}".format(*i) for i in self.response.items()))
         debug_str = debug_str + '\n' + resp_str
         self.session.debug_txt.text = debug_str
@@ -280,264 +199,224 @@ class LearningTrial(MRITrial):
             self.update_debug_txt()
             self.session.debug_txt.draw()
 
-        self.testtext.draw()
-
-        if self.phase == 0:   # waiting for scanner-time
-            if self.parameters['block_trial_ID'] == 0:
-                self.session.scanner_wait_screen.draw()
-            else:
-                self.session.fixation_cross.draw()
-
-        elif self.phase == 1:  # Pre-cue fix cross
+        if self.phase == 0:  # Pre-cue fix cross
             self.session.fixation_cross.draw()
 
-        elif self.phase == 2:  # Cue
+        elif self.phase == 1:  # Cue
             if self.current_cue is not None:
                 self.current_cue.draw()
 
-        elif self.phase == 3:  # Post-cue fix cross
+        elif self.phase == 2:  # Post-cue fix cross
             self.session.fixation_cross.draw()
 
-        elif self.phase == 4:  # Stimulus
+        elif self.phase == 3:  # Stimulus
+            if not self.highlights_reset:
+                # make sure to reset so the highlighting rectangles from previous trial isn't drawn
+                self.stim[0].selected = False
+                self.stim[1].selected = False
+                self.highlights_reset = True
+
             for stim in self.stim:
                 stim.draw()
             self.session.fixation_cross.draw()
 
-        elif self.phase == 5:  # Selection
+        elif self.phase == 4:  # Selection
             for stim in self.stim:
                 stim.draw()
             self.session.fixation_cross.draw()
 
-        elif self.phase == 6:  # feedback
+        elif self.phase == 5:  # feedback
             for fb in self.current_feedback:
                 fb.draw()
 
-            if len(self.current_feedback) < 3:
-                self.session.fixation_cross.draw()
+            # if len(self.current_feedback) < 3:
+            #     self.session.fixation_cross.draw()
 
-        elif self.phase == 7:  # iti
+        elif self.phase == 6:  # iti
             self.session.fixation_cross.draw()
 
-        super(LearningTrial, self).draw()
 
+class TextTrial(Trial):
 
-# class EndOfBlockTrial(MRITrial):
-#
-#     def __init__(self, ID, parameters, phase_durations, session=None, screen=None, tracker=None):
-#         super(EndOfBlockTrial, self).__init__(parameters=parameters,
-#                                               phase_durations=phase_durations,
-#                                               session=session,
-#                                               screen=screen,
-#                                               tracker=tracker)
-#
-#         self.ID = ID
-#         self.parameters = parameters
-#
-#         # initialize times
-#         self.t_time = self.jitter_time = self.stimulus_time = self.iti_time = None
-#
-#         # guestimate the amount of money to be earned
-#         estimated_moneys = self.session.estimate_bonus()
-#         end_str = '!' if estimated_moneys > 0 else ''
-#
-#         self.stim = [
-#             visual.TextStim(screen, pos=(0, 4),
-#                             units=self.session.config.get('text', 'units'),
-#                             height=self.session.config.get('text', 'height'),
-#                             text='End of block. So far, you earned %d points%s' % (self.session.total_points, end_str)),
-#             visual.TextStim(screen, pos=(0, 0),
-#                             units=self.session.config.get('text', 'units'),
-#                             height=self.session.config.get('text', 'height'),
-#                             text='Based on your performance so far, it looks like you will receive a bonus of approximately %.2f euro%s' % (estimated_moneys, end_str)),
-#             visual.TextStim(screen, pos=(0, -4),
-#                             units=self.session.config.get('text', 'units'),
-#                             height=self.session.config.get('text', 'height'),
-#                             text='You can take a short break now. Press <space bar> to continue.' %
-#                                  self.session.total_points)
-#         ]
-#
-#     def event(self):
-#
-#         for ev, time in event.getKeys(timeStamped=self.session.clock):
-#             if len(ev) > 0:
-#                 if ev in ['esc', 'escape']:
-#                     self.events.append([-99, time, self.session.clock.getTime() - self.start_time])
-#                     self.stopped = True
-#                     self.session.stopped = True
-#                     print 'run canceled by user'
-#
-#                 # it handles both numeric and lettering modes
-#                 elif ev == '+' or ev == 'equal':
-#                     self.events.append([-99, time, self.session.clock.getTime() - self.start_time])
-#                     self.stopped = True
-#                     print 'trial canceled by user'
-#
-#                 elif ev == self.session.mri_trigger_key:  # TR pulse
-#                     self.events.append([99, time, self.session.clock.getTime() - self.start_time])
-#                     # if self.phase == 0:
-#                     #     self.phase_forward()
-#
-#                 elif ev in self.session.response_button_signs:
-#                     self.events.append([ev, time, self.session.clock.getTime() - self.start_time, 'key_press'])
-#
-#                 elif ev in ['space']:
-#                     self.events.append([ev, time, self.session.clock.getTime() - self.start_time, 'key_press'])
-#                     if self.phase == 1:
-#                         self.stopped = True
-#
-#             super(EndOfBlockTrial, self).key_event(ev)
-#
-#     def run(self):
-#         """
-#         Runs this trial
-#         """
-#
-#         self.start_time = self.session.clock.getTime()
-#         if self.tracker:
-#             self.tracker.log('trial ' + str(self.ID) + ' started at ' + str(self.start_time) )
-#             self.tracker.send_command('record_status_message "Trial ' + str(self.ID) + '"')
-#         self.events.append('trial ' + str(self.ID) + ' started at ' + str(self.start_time))
-#
-#         while not self.stopped:
-#             self.run_time = self.session.clock.getTime() - self.start_time
-#
-#             # waits for this phase to end (final pulse being collected)
-#             if self.phase == 0:
-#                 self.t_time = self.session.clock.getTime()
-#                 if (self.t_time - self.start_time) > self.phase_durations[0]:
-#                     self.phase_forward()
-#
-#             # events and draw, but only if we haven't stopped yet
-#             if not self.stopped:
-#                 self.event()
-#                 self.draw()
-#
-#         self.stop()
-#
-#     def draw(self):
-#
-#         if self.phase == 1:   # waiting for scanner-time
-#             for st in self.stim:
-#                 st.draw()
-#
-#         super(EndOfBlockTrial, self).draw()
-#
-#
-# class EndOfExperimentTrial(EndOfBlockTrial):
-#     def __init__(self, ID, parameters, phase_durations, session=None, screen=None, tracker=None):
-#         super(EndOfExperimentTrial, self).__init__(ID=ID,
-#                                                    parameters=parameters,
-#                                                    phase_durations=phase_durations,
-#                                                    session=session,
-#                                                    screen=screen,
-#                                                    tracker=tracker)
-#
-#         self.ID = ID
-#         self.parameters = parameters
-#
-#         # initialize times
-#         self.t_time = self.jitter_time = self.stimulus_time = self.iti_time = None
-#
-#         if self.session.practice:
-#             txt = 'This is the end of the practice session\n\nPress <space bar> to continue to the real experiment'
-#         else:
-#             txt = 'This is the end of experiment\n\nPlease inform the experiment leader now'
-#         self.stim = [
-#             visual.TextStim(screen,
-#                             pos=(0, 0),
-#                             units=self.session.config.get('text', 'units'),
-#                             height=self.session.config.get('text', 'height'),
-#                             text=txt)]
+    def __init__(self, trial_nr, parameters, phase_durations, #text_stim_params,
+                 decoration_objects = (),
+                 phase_names=None, session=None):
+        super(TextTrial, self).__init__(trial_nr=trial_nr, parameters=parameters,
+                                        phase_durations=phase_durations, phase_names=phase_names,
+                                        session=session)
 
+        self.decoration_objects = decoration_objects
+        # self.text_stims = []
+        # for param_set in text_stim_params:
+        #     self.text_stims.append(visual.TextStim(win=self.session.win, **param_set))
 
-class InstructionTrial(MRITrial):
-
-    def __init__(self, ID, parameters, phase_durations, session=None, screen=None, tracker=None):
-        super(InstructionTrial, self).__init__(parameters=parameters,
-                                               phase_durations=phase_durations,
-                                               session=session,
-                                               screen=screen,
-                                               tracker=tracker)
-
-        self.ID = ID
-        self.parameters = parameters
-
-        # initialize times
-        self.t_time = self.stimulus_time = self.iti_time = None
-
-#        self.instruction_text = visual.TextStim(screen, text='End of block. Waiting for operator...')
-
-    def event(self):
-
-        for ev, time in event.getKeys(timeStamped=self.session.clock):
-            if len(ev) > 0:
-                if ev in ['esc', 'escape']:
-                    self.events.append([-99, time, self.session.clock.getTime() - self.start_time])
-                    self.stopped = True
-                    self.session.stopped = True
-                    print('run canceled by user')
-
-                # it handles both numeric and lettering modes
-                elif ev == '+' or ev == 'equal':
-                    self.events.append([-99, time, self.session.clock.getTime() - self.start_time])
-                    self.stopped = True
-                    print('trial canceled by user')
-
-                elif ev == self.session.mri_trigger_key:  # TR pulse
-                    self.events.append([99, time, self.session.clock.getTime() - self.start_time])
-                    # if self.phase == 0:
-                    #     self.phase_forward()
-
-                elif ev in self.session.response_button_signs:
-                    self.events.append([ev, time, self.session.clock.getTime() - self.start_time, 'key_press'])
-
-                elif ev in ['space']:
-                    self.events.append([ev, time, self.session.clock.getTime() - self.start_time, 'key_press'])
-                    if self.phase == 1:
-                        self.stopped = True
-
-            super(InstructionTrial, self).key_event(ev)
-
-    def run(self):
-        """
-        Runs this trial
-        """
-
-        self.start_time = self.session.clock.getTime()
-        if self.tracker:
-            self.tracker.log('trial ' + str(self.ID) + ' started at ' + str(self.start_time) )
-            self.tracker.send_command('record_status_message "Trial ' + str(self.ID) + '"')
-        self.events.append('trial ' + str(self.ID) + ' started at ' + str(self.start_time))
-
-        while not self.stopped:
-            self.run_time = self.session.clock.getTime() - self.start_time
-
-            # waits for this phase to end (final pulse being collected)
-            if self.phase == 0:
-                self.t_time = self.session.clock.getTime()
-                if (self.t_time - self.start_time) > self.phase_durations[0]:
-                    self.phase_forward()
-
-            # events and draw, but only if we haven't stopped yet
-            if not self.stopped:
-                self.event()
-                self.draw()
-
-        self.stop()
+        self.last_key = None
 
     def draw(self):
 
-        for element in self.session.current_instruction_screen:
-           element.draw()
+        # for text_stim in self.text_stims:
+        #     text_stim.draw()
+        for stim in self.decoration_objects:
+            stim.draw()
+
+    def get_events(self):
+        evs = event.getKeys(timeStamped=self.session.clock)
+
+        for ev, time in evs:
+            if len(ev) > 0:
+                if ev == 'q':
+                    self.session.close()
+                    self.session.quit()
+                elif ev == 'equal' or ev == '+' or ev == 'space' or ev == '-' or ev == 'minus' or ev == 'backspace':
+                    self.last_key = ev
+                    self.stop_trial()
+
+
+class InstructionTrial(LearningTrial):
+
+    def __init__(self, trial_nr, parameters, phase_durations,
+                 decoration_objects=(), allow_space_break=False,
+                 phase_names=None, session=None):
+        super(InstructionTrial, self).__init__(trial_nr=trial_nr, parameters=parameters,
+                                               phase_durations=phase_durations, phase_names=phase_names,
+                                               session=session)
+        self.allow_space_break = allow_space_break
+        self.decoration_objects = decoration_objects
+        # self.instruction_txt = [visual.TextStim(self.session.win, text='test',
+        #                                         pos=(0, 4))]
+        self.deadline = 60
+        self.last_key = None
+
+    def make_feedback_screen(self):
+
+        # set-up feedback: 1. Did the pp win? only
+        self.current_feedback = []
+        if self.choice_outcome:
+            self.current_feedback.append(self.session.feedback_outcome_objects[1])
+        elif not self.choice_outcome:
+            self.current_feedback.append(self.session.feedback_outcome_objects[0])
+
+    def get_events(self):
+        """ evs, times can but used to let a child object pass on the evs and times """
+
+        evs = event.getKeys(timeStamped=self.session.clock)
+
+        for ev, time in evs:
+            if len(ev) > 0:
+                if ev == 'q':
+                    self.session.close()
+                    self.session.quit()
+                elif ev == 'equal' or ev == '+':
+                    self.stop_trial()
+
+                if self.allow_space_break:
+                    if ev == 'space':
+                        self.last_key = ev
+                        self.stop_trial()
+
+                idx = self.session.global_log.shape[0]
+
+                # TR pulse
+                if ev == self.session.mri_trigger:
+                    event_type = 'pulse'
+                elif ev in self.session.response_button_signs:
+                    event_type = 'response'
+                    if self.phase == 3 or self.phase == 4:
+                        if not self.response_measured:
+                            self.response_measured = True
+                            self.process_response(ev, time, idx)
+
+                            # Not in the MR scanner? End phase upon keypress
+                            if not self.session.in_scanner and self.phase == 3:
+                                self.stop_phase()
+                else:
+                    event_type = 'non_response_keypress'
+
+                # global response handling
+                self.session.global_log.loc[idx, 'trial_nr'] = self.trial_nr
+                self.session.global_log.loc[idx, 'block_nr'] = self.parameters['block_nr']
+                self.session.global_log.loc[idx, 'onset'] = time
+                self.session.global_log.loc[idx, 'event_type'] = event_type
+                self.session.global_log.loc[idx, 'phase'] = self.phase
+                self.session.global_log.loc[idx, 'response'] = ev
+
+                for param, val in self.parameters.items():
+                    self.session.global_log.loc[idx, param] = val
+
+                if self.eyetracker_on:  # send msg to eyetracker
+                    msg = f'start_type-{event_type}_trial-{self.trial_nr}_phase-{self.phase}_key-{ev}_time-{time}'
+                    self.session.tracker.sendMessage(msg)
+
+                if ev != self.session.mri_trigger:
+                    self.last_resp = ev
+                    self.last_resp_onset = time
+
+    def draw(self):
+
+        for stim in self.decoration_objects:
+            stim.draw()
+
+        if self.phase == 5:
+            # also draw during feedback
+            for stim in self.stim:
+                stim.draw()
 
         super(InstructionTrial, self).draw()
+
+
+class CheckTrial(InstructionTrial):
+
+    def __init__(self, trial_nr, parameters, phase_durations,
+                 decoration_objects=(), allow_space_break=False,
+                 phase_names=None, session=None):
+        super(CheckTrial, self).__init__(trial_nr=trial_nr, parameters=parameters,
+                                         decoration_objects=decoration_objects,
+                                         allow_space_break=allow_space_break,
+                                         phase_durations=phase_durations, phase_names=phase_names,
+                                         session=session)
+
+        self.correct_feedback = [visual.TextStim(win=self.session.win,
+                                                 text='Correct!'),
+                                 visual.TextStim(win=self.session.win,
+                                                 text='Press <space bar> to continue',
+                                                 pos=(0, -6),
+                                                 italic=True,
+                                                 wrapWidth=100)]
+
+        self.error_feedback = [visual.TextStim(win=self.session.win,
+                                               text='Wrong!'),
+                               visual.TextStim(win=self.session.win,
+                                               text='If you want to do some more trials for this stimulus, '
+                                                    'press <->. Otherwise, press <space '
+                                                    'bar> to continue',
+                                               pos=(0, -6),
+                                               italic=True,
+                                               wrapWidth=100
+                                               )]
+
+    def make_feedback_screen(self):
+        if self.response['direction'] == 0:
+            self.current_feedback = self.correct_feedback
+        else:
+            self.current_feedback = self.error_feedback
+
+    def draw(self):
+
+        if self.phase == 6:
+            # also draw during feedback
+            for stim in self.stim:
+                stim.draw()
+
+        super(CheckTrial, self).draw()
 
 
 class PracticeTrial(LearningTrial):
     """ Practice trials do the same as normal trials, but annotate what happens in each different phase. """
 
-    def __init__(self, ID, parameters, phase_durations, annotate=True, session=None, screen=None, tracker=None):
-        super(PracticeTrial, self).__init__(ID, parameters, phase_durations, session=session, screen=screen, tracker=tracker)
+    def __init__(self, trial_nr, parameters, phase_durations, annotate=True, decoration_objects=(),
+                 phase_names=None, session=None):
+        super(PracticeTrial, self).__init__(trial_nr, parameters, phase_durations,
+                                            phase_names=phase_names, session=session)
 
         # prepare arrow
         arrow_left_vertices = [(0.2, 0.05),
@@ -548,13 +427,15 @@ class PracticeTrial(LearningTrial):
                                (0, 0.1),
                                (0, 0.05)]
 
-        arrow_y_pos = self.session.config.get('text', 'feedback_y_pos')
+        arrow_y_pos = self.session.settings['text']['feedback_y_pos']
 
-        self.arrows = [visual.ShapeStim(win=screen,
+        self.decoration_objects = decoration_objects
+
+        self.arrows = [visual.ShapeStim(win=self.session.win,
                                         vertices=[(x*2+4, y*2+arrow_y_pos[0]) for x, y in arrow_left_vertices],
-                                       fillColor='lightgray', size=1, lineColor='lightgray', units='deg'),
+                                        fillColor='lightgray', size=1, lineColor='lightgray', units='deg'),
 
-                       visual.ShapeStim(win=screen,
+                       visual.ShapeStim(win=self.session.win,
                                         vertices=[(x*2+4, y*2+arrow_y_pos[1]) for x, y in arrow_left_vertices],
                                         fillColor='lightgray', size=1, lineColor='lightgray', units='deg')]
 
@@ -564,118 +445,93 @@ class PracticeTrial(LearningTrial):
                 spdacc = 'fast'
             else:
                 spdacc = 'accurate'
-            self.forward_text = visual.TextStim(win=self.screen,
-                                                text='Press <space bar> to continue\n(In the real task, this will go '
-                                                     'automatically)',
+            self.forward_text = visual.TextStim(win=self.session.win,
+                                                text='Press <space bar> to continue',
                                                 italic=True,
                                                 pos=(0, -4), units='deg',
-                                                wrapWidth=self.session.config.get('text', 'wrap_width'),
+                                                wrapWidth=self.session.settings['text']['wrap_width'],
                                                 alignHoriz='center'
                                                 )
             self.annotations = {
-                'phase_1': visual.TextStim(win=self.screen,
-                                           text='This indicates the trial is about to start. Please keep your eyes '
-                                                'fixed to this cross',
+                'phase_0': visual.TextStim(win=self.session.win,
+                                           text='This indicates the trial is about to start. Please focus on this '
+                                                'cross',
                                            pos=(0, 4), units='deg',
-                                           wrapWidth=self.session.config.get('text', 'wrap_width')
+                                           wrapWidth=self.session.settings['text']['wrap_width']
                                            ),
-                'phase_2': visual.TextStim(win=self.screen,
+                'phase_1': visual.TextStim(win=self.session.win,
                                            text='This cue tells you to be fast or accurate. In the upcoming choice, '
                                                 'you need to be %s!' % spdacc,
                                            pos=(0, 4), units='deg',
-                                           wrapWidth=self.session.config.get('text', 'wrap_width')
+                                           wrapWidth=self.session.settings['text']['wrap_width']
                                            ),
-                'phase_4': [
-                    visual.TextStim(win=self.screen,
-                                    text='These are your choice options',
-                                    pos=(0, 4), units='deg'),
-                    visual.TextStim(win=self.screen,
-                                    text='Decide which you want to choose now!\nPress %s to choose left OR %s to '
-                                         'choose right' %(self.session.response_button_signs[0],
-                                                          self.session.response_button_signs[1]),
-                                    pos=(0, -4), units='deg',
-                                    wrapWidth=self.session.config.get('text', 'wrap_width')
-                                    )],
-                'phase_5': visual.TextStim(win=self.screen,
+                'phase_3': [
+                    visual.TextStim(win=self.session.win,
+                                    text='These are your choice options. Make your choice now',
+                                    pos=(0, 4), units='deg')
+                    # visual.TextStim(win=self.session.win,
+                    #                 text='Decide which you want to choose now!\nPress %s to choose left OR %s to '
+                    #                      'choose right' %(self.session.response_button_signs[0],
+                    #                                       self.session.response_button_signs[1]),
+                    #                 pos=(0, -4), units='deg',
+                    #                 wrapWidth=self.session.settings['text']['wrap_width']
+                                    ],
+                'phase_4': visual.TextStim(win=self.session.win,
                                            text='Your choice is highlighted shortly',
                                            pos=(0, 4), units='deg'),
-                'phase_6': [
+                'phase_5': [
                     self.arrows[0],
-                    visual.TextStim(win=self.screen,
+                    visual.TextStim(win=self.session.win,
                                     text='This is the outcome of your choice',
                                     pos=(6, 0), units='deg',
                                     alignHoriz='left')],
                 'phase_7': [
                     self.arrows[1],
-                    visual.TextStim(win=self.screen,
-                                    text='This is your reward. If you were in time, your reward is the '
-                                         'same as the outcome. If you were too slow to decide, you get no '
-                                         'points.',
+                    visual.TextStim(win=self.session.win,
+                                    text='This is your reward. You were in time, so your reward is '
+                                         'the same as the outcome',
                                     pos=(8, 0), units='deg', alignHoriz='left')],
                 'phase_8': [
-                    visual.TextStim(win=self.screen,
-                                    text='This is what it looks like when you were too late. In these '
-                                         'cases, you do not get points - even when the outcome was 100 '
-                                         'points',
+                    visual.TextStim(win=self.session.win,
+                                    text='If you are too late, you *lose* 100 points '
+                                         'whether the outcome was +0 or +100',
                                     pos=(8, 0), units='deg', alignHoriz='left',
                                     ),
-                    visual.TextStim(win=self.screen,
-                                    text='Press < B > if you want to restart this explanation.\n\nPress <space bar> '
-                                         'to start practicing for real!',
+                    visual.TextStim(win=self.session.win,
+                                    text='Press <backspace> to restart this explanation',
                                     pos=(0, -4), units='deg', alignVert='top',
-                                    wrapWidth=self.session.config.get('text', 'wrap_width')
-                                    )]
+                                    wrapWidth=self.session.settings['text']['wrap_width']
+                                    ),
+                    visual.TextStim(win=self.session.win,
+                                    text='Press <space bar> to continue',
+                                    pos=(0, -5), units='deg', alignVert='top',
+                                    wrapWidth=self.session.settings['text']['wrap_width']
+                                    )
+                ]
             }
 
     def draw(self):
 
-        if self.session.debug:
-            self.update_debug_txt()
-            self.session.debug_txt.draw()
+        for stim in self.decoration_objects:
+            stim.draw()
 
-        if self.phase == 0:   # waiting for scanner-time
-            if self.parameters['block_trial_ID'] == 0:
-                self.session.scanner_wait_screen.draw()
-            else:
-                self.session.fixation_cross.draw()
-
-        elif self.phase == 1:  # Pre-cue fix cross
-            self.session.fixation_cross.draw()
-
-        elif self.phase == 2:  # Cue
-            if self.current_cue is not None:
-                self.current_cue.draw()
-
-        elif self.phase == 3:  # Post-cue fix cross
-            self.session.fixation_cross.draw()
-
-        elif self.phase == 4:  # Stimulus
-            for stim in self.stim:
-                stim.draw()
-
-            self.session.fixation_cross.draw()
-
-        elif self.phase == 5:  # Selection
-            for stim in self.stim:
-                stim.draw()
-
-            # self.stim.draw_selection_rect()
-            self.session.fixation_cross.draw()
-
-        elif self.phase in [6, 7, 8]:  # Feedback is now split in three phases, for annotations of different components
+        if self.phase == 7:  # Feedback is now split in three phases, for annotations of different components
             for fb in self.current_feedback:
                 fb.draw()
 
-            if len(self.current_feedback) < 3:
-                self.session.fixation_cross.draw()  # why does it draw this even with 'too slow' feedback?
+        if self.phase == 8:
+            self.current_feedback[0].draw()                   # outcome = whatever the participant got
+            self.session.feedback_earnings_objects[2].draw()  # reward = 0
+            self.session.feedback_timing_objects[0].draw()
 
-        elif self.phase == 9:  # iti
-            self.session.fixation_cross.draw()
+        if self.phase in [0, 1, 2, 4, 5, 6, 7]:
+            self.forward_text.draw()
 
         # Annotations
         if self.annotate:
-            if 'phase_%d' %self.phase in self.annotations.keys():
-                this_phase_annotations = self.annotations['phase_%d' % self.phase]
+            phase_n_str = 'phase_{}'.format(self.phase)
+            if phase_n_str in self.annotations.keys():
+                this_phase_annotations = self.annotations[phase_n_str]
                 if not isinstance(this_phase_annotations, list):
                     this_phase_annotations = [this_phase_annotations]
                 for annotation in this_phase_annotations:
@@ -686,140 +542,153 @@ class PracticeTrial(LearningTrial):
 
         super(PracticeTrial, self).draw()
 
-    def event(self):
+    def get_events(self):
 
-        for ev, time in event.getKeys(timeStamped=self.session.clock):
+        evs = event.getKeys(timeStamped=self.session.clock)
+
+        for ev, time in evs:
             if len(ev) > 0:
-                if ev in ['minus', '-', 'b']:
-                    self.events.append([-99, ev, time, self.session.clock.getTime() - self.start_time])
-                    self.session.restart_block = True
-                    self.stopped = True
-                    print('block restarted by user')
+                if ev == 'q':
+                    self.session.close()
+                    self.session.quit()
+                elif ev == 'equal' or ev == '+':
+                    self.stop_trial()
 
-                # Response (key press)
+                if ev == 'space' and not self.phase == 3:
+                    self.last_key = ev
+                    self.stop_phase()
+
+                if ev in ['space', 'backspace'] and self.phase == 8:
+                    self.last_key = ev
+                    self.stop_phase()
+
+                idx = self.session.global_log.shape[0]
+
+                # TR pulse
+                if ev == self.session.mri_trigger:
+                    event_type = 'pulse'
                 elif ev in self.session.response_button_signs:
-                    self.events.append([ev, time,  # absolute time since start of experiment
-                                        self.session.clock.getTime() - self.start_time,  # time since start of trial
-                                        self.stimulus_time - self.jitter_time_2,  # time since stimulus start
-                                        'key_press'])
-
-                    if self.phase == 4 or self.phase == 5:
+                    event_type = 'response'
+                    if self.phase == 3 or self.phase == 4:
                         if not self.response_measured:
                             self.response_measured = True
-                            self.process_response(ev, time)
+                            self.process_response(ev, time, idx)
 
                             # Not in the MR scanner? End phase upon keypress
-                            if self.session.tr == 0 and self.phase == 4:
-                                self.phase_forward()
+                            if not self.session.in_scanner and self.phase == 3:
+                                self.stop_phase()
+                else:
+                    event_type = 'non_response_keypress'
 
-                elif ev in ['space'] and self.phase in [1, 2, 5, 6, 7, 8] and np.isinf(self.phase_durations[
-                                                                                           self.phase]):
-                    if self.phase == 7:
-                        # adjust feedback
-                        self.current_feedback[1] = self.session.feedback_earnings_objects[0]  # no points earned
-                        self.current_feedback.append(self.session.feedback_timing_objects[0])  # too late
+                # global response handling
+                self.session.global_log.loc[idx, 'trial_nr'] = self.trial_nr
+                self.session.global_log.loc[idx, 'block_nr'] = self.parameters['block_nr']
+                self.session.global_log.loc[idx, 'onset'] = time
+                self.session.global_log.loc[idx, 'event_type'] = event_type
+                self.session.global_log.loc[idx, 'phase'] = self.phase
+                self.session.global_log.loc[idx, 'response'] = ev
 
-                    # if self.phase < 8:
-                    self.phase_forward()
-                    if self.phase == 2 and self.current_cue is None:
-                        print('moving up!')
-                        self.cue_time = self.session.clock.getTime()
-                        self.phase_forward()  # move another phase forward
-                    # else:
-                    #     self.stopped = True
+                for param, val in self.parameters.items():
+                    self.session.global_log.loc[idx, param] = val
 
-            super(PracticeTrial, self).event(ev, time)
+                if self.eyetracker_on:  # send msg to eyetracker
+                    msg = f'start_type-{event_type}_trial-{self.trial_nr}_phase-{self.phase}_key-{ev}_time-{time}'
+                    self.session.tracker.sendMessage(msg)
 
-    # def process_response(self, ev, time):
-    #
-    #     super(PracticeTrial, self).process_response(ev, time)
-    #     if len(self.current_feedback)
-
-    def run(self):
-        """
-        Runs this trial
-        """
-
-        self.start_time = self.session.clock.getTime()
-        if self.tracker:
-            self.tracker.log('trial ' + str(self.ID) + ' started at ' + str(self.start_time))
-            self.tracker.send_command('record_status_message "Trial ' + str(self.ID) + '"')
-        self.events.append('trial ' + str(self.ID) + ' started at ' + str(self.start_time))
-
-        while not self.stopped:
-            self.run_time = self.session.clock.getTime() - self.start_time
-
-            # Waits for scanner pulse.
-            if self.phase == 0:
-                self.t_time = self.session.clock.getTime()
-                if not isinstance(self.session, MRISession) or self.session.tr == 0:
-                    self.phase_forward()
-
-            # In phase 1, we show fix cross (jittered timing)
-            if self.phase == 1:
-                self.jitter_time_1 = self.session.clock.getTime()
-                if (self.jitter_time_1 - self.t_time) > self.phase_durations[1]:
-                    self.phase_forward()
-
-            # In phase 2, we show the cue (fixed timing)
-            if self.phase == 2:
-                self.cue_time = self.session.clock.getTime()
-                if (self.cue_time - self.jitter_time_1) > self.phase_durations[2]:
-                    self.phase_forward()
-
-            # In phase 3, we show the fixation cross again (jittered timing)
-            if self.phase == 3:
-                self.jitter_time_2 = self.session.clock.getTime()
-                if (self.jitter_time_2 - self.cue_time) > self.phase_durations[3]:
-                    self.phase_forward()
-
-            # In phase 4, we show the stimulus
-            if self.phase == 4:
-                self.stimulus_time = self.session.clock.getTime()
-                if (self.stimulus_time - self.jitter_time_2) > self.phase_durations[4]:
-                    self.phase_forward()
-
-            # In phase 5, we highlight the chosen option
-            if self.phase == 5:
-                self.selection_time = self.session.clock.getTime()
-                if (self.selection_time - self.stimulus_time) > self.phase_durations[5]:
-                    self.phase_forward()
-
-            # In phase 6, we show feedback
-            if self.phase == 6:
-                self.feedback_time_1 = self.session.clock.getTime()
-                if (self.feedback_time_1 - self.selection_time) > self.phase_durations[6]:
-                    self.phase_forward()
-
-            # In phase 7, we show feedback
-            if self.phase == 7:
-                self.feedback_time_2 = self.session.clock.getTime()
-                if (self.feedback_time_2 - self.feedback_time_1) > self.phase_durations[7]:
-                    self.phase_forward()
-
-            # In phase 8, we show feedback
-            if self.phase == 8:
-                self.feedback_time_3 = self.session.clock.getTime()
-                if (self.feedback_time_3 - self.feedback_time_2) > self.phase_durations[8]:
-                    self.phase_forward()
-
-            # ITI
-            if self.phase == 9:
-                self.iti_time = self.session.clock.getTime()
-                if (self.iti_time - self.feedback_time_3) > self.phase_durations[9]:
-                    self.phase_forward()
-                    self.stopped = True
-
-            # events and draw, but only if we haven't stopped yet
-            if not self.stopped:
-                self.event()
-                self.draw()
-
-                # # make screen shots
-                # ss_fn = 'screenshots/trial_%d_phase_%d_set_%d.png' % (self.ID, self.phase, self.parameters[
-                #     'stimulus_set'])
-                # if not os.path.isfile(ss_fn):
-                #     self.screen.getMovieFrame()  # Defaults to front buffer, I.e. what's on screen now.
-                #     self.screen.saveMovieFrames(ss_fn)
-
-        self.stop()
+                if ev != self.session.mri_trigger:
+                    self.last_resp = ev
+                    self.last_resp_onset = time
+#
+#     # def process_response(self, ev, time):
+#     #
+#     #     super(PracticeTrial, self).process_response(ev, time)
+#     #     if len(self.current_feedback)
+#
+#     def run(self):
+#         """
+#         Runs this trial
+#         """
+#
+#         self.start_time = self.session.clock.getTime()
+#         if self.tracker:
+#             self.tracker.log('trial ' + str(self.trial_nr) + ' started at ' + str(self.start_time))
+#             self.tracker.send_command('record_status_message "Trial ' + str(self.trial_nr) + '"')
+#         self.events.append('trial ' + str(self.trial_nr) + ' started at ' + str(self.start_time))
+#
+#         while not self.stopped:
+#             self.run_time = self.session.clock.getTime() - self.start_time
+#
+#             # Waits for scanner pulse.
+#             if self.phase == 0:
+#                 self.t_time = self.session.clock.getTime()
+#                 if not self.session.in_scanner:
+#                     self.phase_forward()
+#
+#             # In phase 1, we show fix cross (jittered timing)
+#             if self.phase == 1:
+#                 self.jitter_time_1 = self.session.clock.getTime()
+#                 if (self.jitter_time_1 - self.t_time) > self.phase_durations[1]:
+#                     self.phase_forward()
+#
+#             # In phase 2, we show the cue (fixed timing)
+#             if self.phase == 2:
+#                 self.cue_time = self.session.clock.getTime()
+#                 if (self.cue_time - self.jitter_time_1) > self.phase_durations[2]:
+#                     self.phase_forward()
+#
+#             # In phase 3, we show the fixation cross again (jittered timing)
+#             if self.phase == 3:
+#                 self.jitter_time_2 = self.session.clock.getTime()
+#                 if (self.jitter_time_2 - self.cue_time) > self.phase_durations[3]:
+#                     self.phase_forward()
+#
+#             # In phase 4, we show the stimulus
+#             if self.phase == 4:
+#                 self.stimulus_time = self.session.clock.getTime()
+#                 if (self.stimulus_time - self.jitter_time_2) > self.phase_durations[4]:
+#                     self.phase_forward()
+#
+#             # In phase 5, we highlight the chosen option
+#             if self.phase == 5:
+#                 self.selection_time = self.session.clock.getTime()
+#                 if (self.selection_time - self.stimulus_time) > self.phase_durations[5]:
+#                     self.phase_forward()
+#
+#             # In phase 6, we show feedback
+#             if self.phase == 6:
+#                 self.feedback_time_1 = self.session.clock.getTime()
+#                 if (self.feedback_time_1 - self.selection_time) > self.phase_durations[6]:
+#                     self.phase_forward()
+#
+#             # In phase 7, we show feedback
+#             if self.phase == 7:
+#                 self.feedback_time_2 = self.session.clock.getTime()
+#                 if (self.feedback_time_2 - self.feedback_time_1) > self.phase_durations[7]:
+#                     self.phase_forward()
+#
+#             # In phase 8, we show feedback
+#             if self.phase == 8:
+#                 self.feedback_time_3 = self.session.clock.getTime()
+#                 if (self.feedback_time_3 - self.feedback_time_2) > self.phase_durations[8]:
+#                     self.phase_forward()
+#
+#             # ITI
+#             if self.phase == 9:
+#                 self.iti_time = self.session.clock.getTime()
+#                 if (self.iti_time - self.feedback_time_3) > self.phase_durations[9]:
+#                     self.phase_forward()
+#                     self.stopped = True
+#
+#             # events and draw, but only if we haven't stopped yet
+#             if not self.stopped:
+#                 self.event()
+#                 self.draw()
+#
+#                 # # make screen shots
+#                 # ss_fn = 'screenshots/trial_%d_phase_%d_set_%d.png' % (self.ID, self.phase, self.parameters[
+#                 #     'stimulus_set'])
+#                 # if not os.path.isfile(ss_fn):
+#                 #     self.screen.getMovieFrame()  # Defaults to front buffer, I.e. what's on screen now.
+#                 #     self.screen.saveMovieFrames(ss_fn)
+#
+#         self.stop()

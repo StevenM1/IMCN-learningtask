@@ -5,8 +5,8 @@ from copy import copy
 class LearningStimulusSingle(object):
     """ Draws a single stimulus, instead of a set """
 
-    def __init__(self, screen, stimulus, stimulus_type, x_pos, **kwargs):
-        self.screen = screen
+    def __init__(self, win, stimulus, stimulus_type, x_pos, **kwargs):
+        self.win = win
         self.x_pos = x_pos
         self.x_pos_current = x_pos
         self.selected = False
@@ -17,18 +17,18 @@ class LearningStimulusSingle(object):
 
         if stimulus_type == 'colors':
             kwargs.pop('text_height')
-            self.stimulus = visual.Rect(self.screen, fillColor=stimulus, pos=(x_pos, 0), **kwargs)
+            self.stimulus = visual.Rect(self.win, fillColor=stimulus, pos=(x_pos, 0), **kwargs)
 
         elif stimulus_type == 'agathodaimon':
             kws = copy(kwargs)
-            print(kws)
             kws.pop('height')
             kws.pop('width')
             height = kws['text_height']
             kws.pop('text_height')
-            self.stimulus = visual.TextStim(self.screen,
+            self.stimulus = visual.TextStim(self.win,
                                             text=stimulus,
                                             height=height,
+                                            alignHoriz='center',
                                             pos=(x_pos, 0),
                                             font='Agathodaimon',
                                             fontFiles=['./lib/AGATHODA.TTF'], **kws)
@@ -39,7 +39,7 @@ class LearningStimulusSingle(object):
         kwargs.pop('width')
         kwargs.pop('text_height')
 
-        self.selection_rect = visual.Rect(self.screen, width=width+.5, height=height+.5, fillColor=None,
+        self.selection_rect = visual.Rect(self.win, width=width+.5, height=height+.5, fillColor=None,
                                          pos=(x_pos, 0), lineWidth=rect_line_width, **kwargs)
 
     def draw(self):
@@ -55,8 +55,8 @@ class LearningStimulus(object):
     Agathodaimon alphabet seems to work
     """
 
-    def __init__(self, screen, set, stimulus_type='colors', x_pos=(-1, 1), **kwargs):
-        self.screen = screen
+    def __init__(self, win, set, stimulus_type='colors', x_pos=(-1, 1), **kwargs):
+        self.win = win
         self.x_pos = x_pos
         self.x_pos_current = x_pos
         self.selected = None
@@ -68,8 +68,8 @@ class LearningStimulus(object):
         if stimulus_type == 'colors':
             kwargs.pop('text_height')
             self.stimuli = [
-                visual.Rect(self.screen, fillColor=set[0], pos=(x_pos[0], 0), **kwargs),
-                visual.Rect(self.screen, fillColor=set[1], pos=(x_pos[1], 0), **kwargs)
+                visual.Rect(self.win, fillColor=set[0], pos=(x_pos[0], 0), **kwargs),
+                visual.Rect(self.win, fillColor=set[1], pos=(x_pos[1], 0), **kwargs)
             ]
         elif stimulus_type == 'agathodaimon':
             kws = copy(kwargs)
@@ -78,10 +78,10 @@ class LearningStimulus(object):
             height = kws['text_height']
             kws.pop('text_height')
             self.stimuli = [
-                visual.TextStim(self.screen, text=set[0], height=height, pos=(0, 0),  #pos=(x_pos[0], 0),
+                visual.TextStim(self.win, text=set[0], height=height, pos=(0, 0),  #pos=(x_pos[0], 0),
                                 font='Agathodaimon',
                                 fontFiles=['./lib/AGATHODA.TTF'], **kws),
-                visual.TextStim(self.screen, text=set[1], height=height, pos=(0, 0),
+                visual.TextStim(self.win, text=set[1], height=height, pos=(0, 0),
                                 font='Agathodaimon',
                                 fontFiles=['./lib/AGATHODA.TTF'], **kws)
             ]
@@ -93,9 +93,9 @@ class LearningStimulus(object):
         kwargs.pop('text_height')
 
         self.selection_rect = [
-            visual.Rect(self.screen, width=width+.5, height=height+.5, fillColor=None,
+            visual.Rect(self.win, width=width+.5, height=height+.5, fillColor=None,
                         pos=(x_pos[0], 0), lineWidth=rect_line_width, **kwargs),
-            visual.Rect(self.screen, width=width+.5, height=height+.5, fillColor=None,
+            visual.Rect(self.win, width=width+.5, height=height+.5, fillColor=None,
                         pos=(x_pos[1], 0), lineWidth=rect_line_width, **kwargs)
         ]
 

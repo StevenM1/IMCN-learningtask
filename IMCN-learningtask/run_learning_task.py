@@ -1,6 +1,6 @@
 
 from LearningSession import *
-from psychopy import core
+import datetime
 import sys
 
 if sys.version[0] == '2':
@@ -32,24 +32,17 @@ if sysErr:
 
 
 def main():
-    # Load config
-    import glob
-    import datetime
-    from exptools.utils.config import ExpToolsConfig
-    config = ExpToolsConfig()
 
     # Set-up monitor on the fly
-    from psychopy import monitors
-    my_monitor = monitors.Monitor(name=config.get('screen', 'monitor_name'))
-    my_monitor.setSizePix(config.get('screen', 'size'))
-    my_monitor.setWidth(config.get('screen', 'physical_screen_size')[0])
-    my_monitor.setDistance(config.get('screen', 'physical_screen_distance'))
-    my_monitor.saveMon()
+    # from psychopy import monitors
+    # my_monitor = monitors.Monitor(name=config.get('screen', 'monitor_name'))
+    # my_monitor.setSizePix(config.get('screen', 'size'))
+    # my_monitor.setWidth(config.get('screen', 'physical_screen_size')[0])
+    # my_monitor.setDistance(config.get('screen', 'physical_screen_distance'))
+    # my_monitor.saveMon()
 
-    tr = 0
-    initials = inp_func('Your initials/subject number: ')
-    index_num = int(inp_func('What is the pp num? [integer or I will crash]: '))
-    practice = inp_func('Start with practice? [y/n, default y]: ') or 'y'
+    index_number = int(inp_func('What is the pp num? [integer or I will crash]: '))
+#    practice = inp_func('Start with practice? [y/n, default y]: ') or 'y'
     start_block = inp_func('Start block? [default 1]: ')
     try:
         start_block = int(start_block)
@@ -72,31 +65,31 @@ def main():
             print('I don''t understand that. Please enter ''y'' or ''n''.')
             simulate = inp_func('Do you want to simulate scan pulses? [y/n, default n]: ') or 'n'
 
-    if scanner == 'y' or simulate == 'y':
-        tr = float(inp_func('What is the TR?: ')) or 0
-
-    ### start practice?
-    if practice == 'y':
-        sess_prac = LearningSession(subject_initials=initials,
-                                    index_number=index_num,
-                                    tr=tr,
-                                    start_block=start_block,
-                                    config=config,
-                                    practice=True)
-        sess_prac.run()
-
-    sess = LearningSession(subject_initials=initials,
-                           index_number=index_num,
-                           tr=tr,
-                           start_block=start_block,
-                           config=config,
-                           practice=False)
-
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%m%S")
+    output_str = f'sub-{index_number}_task-learning_datetime-{timestamp}'
+    output_dir = './data'
     if simulate == 'y':
-        # Run with simulated scanner (useful for behavioral pilots with eye-tracking)
-        from psychopy.hardware.emulator import launchScan
-        scanner_emulator = launchScan(win=sess.screen, settings={'TR': tr, 'volumes': 30000, 'sync': 't'},
-                                      mode='Test')
+        settings_file = '/Users/steven/Sync/PhDprojects/IMCN-learningtask/IMCN-learningtask/settings_simulate.yml'
+    else:
+        settings_file = '/Users/steven/Sync/PhDprojects/IMCN-learningtask/IMCN-learningtask/settings.yml'
+
+    # # start practice?
+    # if practice == 'y':
+    #     sess_prac = LearningSession(scanner=scanner,
+    #                                 output_str=output_str,
+    #                                 output_dir=output_dir,
+    #                                 settings_file=settings_file,
+    #                                 start_block=start_block,
+    #                                 index_number=index_number,
+    #                                 practice=True)
+    #     sess_prac.run()
+
+    sess = LearningSession(scanner=scanner,
+                           output_str=output_str,
+                           output_dir=output_dir,
+                           settings_file=settings_file,
+                           start_block=start_block,
+                           index_number=index_number)
     sess.run()
 
 
@@ -104,7 +97,7 @@ if __name__ == '__main__':
     main()
 
     # Force python to quit (so scanner emulator also stops)
-    core.quit()
+    # core.quit()
 
 
 
