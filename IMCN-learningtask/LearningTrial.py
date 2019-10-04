@@ -19,6 +19,8 @@ class LearningTrial(MRITrial):
         self.parameters = parameters
         self.won = None
 
+        self.testtext = visual.TextStim(win=self.screen, text='bla', pos=(10,0))
+
         # set-up response options / dict
         self.response_measured = False  # Has the pp responded yet?
         self.response = {}
@@ -278,6 +280,8 @@ class LearningTrial(MRITrial):
             self.update_debug_txt()
             self.session.debug_txt.draw()
 
+        self.testtext.draw()
+
         if self.phase == 0:   # waiting for scanner-time
             if self.parameters['block_trial_ID'] == 0:
                 self.session.scanner_wait_screen.draw()
@@ -471,13 +475,13 @@ class InstructionTrial(MRITrial):
                     self.events.append([-99, time, self.session.clock.getTime() - self.start_time])
                     self.stopped = True
                     self.session.stopped = True
-                    print 'run canceled by user'
+                    print('run canceled by user')
 
                 # it handles both numeric and lettering modes
                 elif ev == '+' or ev == 'equal':
                     self.events.append([-99, time, self.session.clock.getTime() - self.start_time])
                     self.stopped = True
-                    print 'trial canceled by user'
+                    print('trial canceled by user')
 
                 elif ev == self.session.mri_trigger_key:  # TR pulse
                     self.events.append([99, time, self.session.clock.getTime() - self.start_time])

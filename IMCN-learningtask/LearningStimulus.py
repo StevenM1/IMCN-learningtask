@@ -21,11 +21,15 @@ class LearningStimulusSingle(object):
 
         elif stimulus_type == 'agathodaimon':
             kws = copy(kwargs)
+            print(kws)
             kws.pop('height')
             kws.pop('width')
             height = kws['text_height']
             kws.pop('text_height')
-            self.stimulus = visual.TextStim(self.screen, text=stimulus, pos=(x_pos, 0), height=height,
+            self.stimulus = visual.TextStim(self.screen,
+                                            text=stimulus,
+                                            height=height,
+                                            pos=(x_pos, 0),
                                             font='Agathodaimon',
                                             fontFiles=['./lib/AGATHODA.TTF'], **kws)
 
@@ -74,10 +78,10 @@ class LearningStimulus(object):
             height = kws['text_height']
             kws.pop('text_height')
             self.stimuli = [
-                visual.TextStim(self.screen, text=set[0], pos=(x_pos[0], 0), height=height,
+                visual.TextStim(self.screen, text=set[0], height=height, pos=(0, 0),  #pos=(x_pos[0], 0),
                                 font='Agathodaimon',
                                 fontFiles=['./lib/AGATHODA.TTF'], **kws),
-                visual.TextStim(self.screen, text=set[1], pos=(x_pos[1], 0), height=height,
+                visual.TextStim(self.screen, text=set[1], height=height, pos=(0, 0),
                                 font='Agathodaimon',
                                 fontFiles=['./lib/AGATHODA.TTF'], **kws)
             ]

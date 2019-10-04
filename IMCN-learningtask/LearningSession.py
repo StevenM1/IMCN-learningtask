@@ -8,7 +8,11 @@ import pandas as pd
 import numpy as np
 import os
 import copy
-import cPickle as pkl
+import sys
+if int(sys.version[0]) == 3:
+    import pickle as pkl
+else:
+    import cPickle as pkl
 
 
 class LearningSession(MRISession):

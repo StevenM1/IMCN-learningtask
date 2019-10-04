@@ -1,6 +1,12 @@
 
 from LearningSession import *
 from psychopy import core
+import sys
+
+if sys.version[0] == '2':
+    inp_func = raw_input
+else:
+    inp_func = input
 
 # Kill all background processes (macOS only)
 try:
@@ -41,28 +47,33 @@ def main():
     my_monitor.saveMon()
 
     tr = 0
-    initials = raw_input('Your initials/subject number: ')
-    index_num = int(raw_input('What is the pp num? [integer or I will crash]: '))
-    practice = raw_input('Start with practice? [y/n, default y]: ') or 'y'
-    start_block = raw_input('Start block? [default 1]: ') or 1
+    initials = inp_func('Your initials/subject number: ')
+    index_num = int(inp_func('What is the pp num? [integer or I will crash]: '))
+    practice = inp_func('Start with practice? [y/n, default y]: ') or 'y'
+    start_block = inp_func('Start block? [default 1]: ')
+    try:
+        start_block = int(start_block)
+    except:
+        start_block = 1
+
     if start_block > 1:
         pass
         # ToDo: find last run data to get points from
 
-    scanner = raw_input('Are you in the scanner? [y/n, default n]: ') or 'n'
+    scanner = inp_func('Are you in the scanner? [y/n, default n]: ') or 'n'
     while not scanner in ['n', 'y']:
         print('I don''t understand that. Please enter ''y'' or ''n''.')
-        scanner = raw_input('Are you in the scanner? [y/n, default n]: ') or 'n'
+        scanner = inp_func('Are you in the scanner? [y/n, default n]: ') or 'n'
 
     simulate = 'n'
     if scanner == 'n':
-        simulate = raw_input('Do you want to simulate scan pulses? [y/n, default n]: ') or 'n'
+        simulate = inp_func('Do you want to simulate scan pulses? [y/n, default n]: ') or 'n'
         while not simulate in ['n', 'y']:
             print('I don''t understand that. Please enter ''y'' or ''n''.')
-            simulate = raw_input('Do you want to simulate scan pulses? [y/n, default n]: ') or 'n'
+            simulate = inp_func('Do you want to simulate scan pulses? [y/n, default n]: ') or 'n'
 
     if scanner == 'y' or simulate == 'y':
-        tr = float(raw_input('What is the TR?: ')) or 0
+        tr = float(inp_func('What is the TR?: ')) or 0
 
     ### start practice?
     if practice == 'y':

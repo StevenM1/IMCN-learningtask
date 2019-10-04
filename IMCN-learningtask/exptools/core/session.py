@@ -57,6 +57,8 @@ class Session(object):
                          'max_lums', 'wait_blanking', 'screen_nr', 'mouse_visible',
                          'monitor_name']:
             value = kwargs.pop(argument, config.get('screen', argument))
+            print(argument)
+            print(value)
             setattr(self, argument, value)
 
         if engine == 'pygaze':
@@ -73,18 +75,22 @@ class Session(object):
                 
             self.screen = pygaze.expdisplay
             self.screen.waitBlanking = self.wait_blanking
-        elif engine == 'psychopy':   
-            self.screen = visual.Window(size=self.size, 
-                                        fullscr=self.full_screen, 
+        elif engine == 'psychopy':
+            # import psychopy
+            # print(psychopy.__version__)
+            self.screen = visual.Window(size=self.size,
+                                       # pos=[1250,1250],
+                                        fullscr=self.full_screen,
                                         screen=int(self.screen_nr),
-                                        allowGUI=True, 
-                                        units='pix', 
-                                        allowStencil=True, 
+                                        allowGUI=True,
+                                        units='height',
+                                        allowStencil=True,
                                         rgb=self.background_color, 
-                                        waitBlanking=self.wait_blanking, 
+                                        waitBlanking=self.wait_blanking,
                                         useFBO=True,
                                         winType='pyglet',
-                                        monitor=self.monitor_name)
+                                        monitor=self.monitor_name,
+                                        useRetina=True)
 
         self.screen.setMouseVisible(self.mouse_visible)
         event.Mouse(visible=self.mouse_visible, win=self.screen)
@@ -100,6 +106,12 @@ class Session(object):
 
         self.centimeters_per_degree = self.physical_screen_size[1] / self.screen_height_degrees
         self.pixels_per_centimeter = self.pixels_per_degree / self.centimeters_per_degree
+
+        # tst = visual.TextStim(win=self.screen, text='Outcome: 0',  color='darkred',
+        #                       units=config.get('text', 'units'),
+        #                       height=config.get('text', 'height'),
+        #                       pos=(0, config.get('text', 'feedback_y_pos')[0]))
+        # tst.draw()
 
         self.screen.flip()
 

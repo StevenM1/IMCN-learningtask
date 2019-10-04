@@ -6,3 +6,4 @@ config = ExpToolsConfig()
 from .core import session, trial 
 
 
+__all__ = ['session', 'trial']

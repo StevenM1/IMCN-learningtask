@@ -1,1 +1,2 @@
 psychopy=1.85.3
+pygame
