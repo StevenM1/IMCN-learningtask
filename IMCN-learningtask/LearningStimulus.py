@@ -9,7 +9,7 @@ class LearningStimulusSingle(object):
         self.win = win
         self.x_pos = x_pos
         self.x_pos_current = x_pos
-        self.selected = False
+        # self.selected = False
 
         if 'rect_line_width' in kwargs.keys():
             rect_line_width = kwargs['rect_line_width']
@@ -33,21 +33,44 @@ class LearningStimulusSingle(object):
                                             font='Agathodaimon',
                                             fontFiles=['./lib/AGATHODA.TTF'], **kws)
 
+        # height = kwargs['height']
+        # width = kwargs['width']
+        # kwargs.pop('height')
+        # kwargs.pop('width')
+        # kwargs.pop('text_height')
+        #
+        # self.selection_rect = visual.Rect(self.win, width=width+.5, height=height+.5, fillColor=None,
+        #                                  pos=(x_pos, 0), lineWidth=rect_line_width, **kwargs)
+
+    def draw(self):
+
+        self.stimulus.draw()
+
+        # if self.selected:
+        #     self.selection_rect.draw()
+
+
+class SelectionRectangle(object):
+
+    def __init__(self, win, x_pos, **kwargs):
+        self.win = win
+        rect_line_width = kwargs['rect_line_width']
+        kwargs.pop('rect_line_width')
         height = kwargs['height']
         width = kwargs['width']
         kwargs.pop('height')
         kwargs.pop('width')
         kwargs.pop('text_height')
 
-        self.selection_rect = visual.Rect(self.win, width=width+.5, height=height+.5, fillColor=None,
-                                         pos=(x_pos, 0), lineWidth=rect_line_width, **kwargs)
+        self.selection_rect = visual.Rect(self.win,
+                                          width=width+.5,
+                                          height=height+.5, fillColor=None,
+                                          pos=(x_pos, 0),
+                                          lineWidth=rect_line_width,
+                                          **kwargs)
 
     def draw(self):
-
-        self.stimulus.draw()
-
-        if self.selected:
-            self.selection_rect.draw()
+        self.selection_rect.draw()
 
 
 class LearningStimulus(object):

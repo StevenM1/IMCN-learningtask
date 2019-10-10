@@ -5,6 +5,7 @@ preferences:
 
 window:
   size: [2560, 1440]
+#  size: [800, 600]
   pos: [0, 0]
   color: [0, 0, 0]
   units: deg
@@ -19,7 +20,9 @@ window:
 monitor:
   name: default
   width: 60  # in cm
+#  width: 120
   distance: 50  # in cm
+#  distance: 200
   gamma: 1
 
 mouse:
@@ -54,9 +57,9 @@ eyetracker:
 mri:
   warmup_trs: 0
   simulate: True
-  TR: 2.0  # seconds between volume acquisitions
+  TR: 3.0  # seconds between volume acquisitions
   TA: 2.0  # seconds to acquire one slice (?)
-  volumes: 10  # number of 3D volumes to obtain in a given scanning run
+  volumes: 1000  # number of 3D volumes to obtain in a given scanning run
   sync: t  # character used as flag for sync timing, default=‘5’
   skip: 0  # how many frames to silently omit initially during T1 stabilization, no sync pulse.
   sound: False  # simulate scanner noise

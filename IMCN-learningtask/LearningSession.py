@@ -1,6 +1,6 @@
 from exptools2.core.session import Session
 from LearningTrial import LearningTrial
-from LearningStimulus import FixationCross, LearningStimulusSingle
+from LearningStimulus import FixationCross, LearningStimulusSingle, SelectionRectangle
 from psychopy import visual
 import pandas as pd
 import numpy as np
@@ -33,15 +33,26 @@ class LearningSession(Session):
                                       self.settings['input']['response_button_right']]
 
         # note that all these durations are default values and can and should be overwritten before each trial
-        self.phase_durations = np.array([1,     # phase 0: fix cross1 (ITI pretrial)
-                                         1,     # phase 1: cue
-                                         1,     # phase 2: fix cross2
-                                         2,     # phase 3: stimulus
-                                         0.5,   # phase 4: choice highlight
-                                         0.5,   # phase 5: feedback
-                                         1      # phase 6: fix cross3 (ITI posttrial)
+        self.phase_durations = np.array([100,   # phase 0: wait for trigger
+                                         1,     # phase 1: fix cross1 (ITI pretrial)
+                                         1,     # phase 2: cue
+                                         1,     # phase 3: fix cross2
+                                         2,     # phase 4: stimulus
+                                         0.5,   # phase 5: fix cross3
+                                         0.5,   # phase 6: choice highlight
+                                         0.5,   # phase 7: fix cross4
+                                         0.5,   # phase 8: feedback
+                                         1      # phase 9: fix cross5 (ITI posttrial)
                                          ])
-        self.phase_names = ['fix_cross_1', 'cue', 'fix_cross_2', 'stimulus', 'highlight', 'feedback', 'iti']
+        self.phase_names = ['fix_cross_1',
+                            'cue',
+                            'fix_cross_2',
+                            'stimulus',
+                            'fix_cross_3',
+                            'highlight',
+                            'fix_cross_4',
+                            'feedback',
+                            'fix_cross_5']
 
     def load_design(self):
 
@@ -140,6 +151,23 @@ class LearningSession(Session):
                     units=settings['stimulus']['units'],
                     x_pos=settings['stimulus']['x_pos'][i],
                     rect_line_width=settings['stimulus']['rect_line_width'])
+
+        self.selection_rectangles = [
+            SelectionRectangle(win=self.win,
+                               width=settings['stimulus']['width'],
+                               height=settings['stimulus']['height'],
+                               text_height=settings['stimulus']['text_height'],
+                               units=settings['stimulus']['units'],
+                               x_pos=settings['stimulus']['x_pos'][0],
+                               rect_line_width=settings['stimulus']['rect_line_width']),
+            SelectionRectangle(win=self.win,
+                               width=settings['stimulus']['width'],
+                               height=settings['stimulus']['height'],
+                               text_height=settings['stimulus']['text_height'],
+                               units=settings['stimulus']['units'],
+                               x_pos=settings['stimulus']['x_pos'][1],
+                               rect_line_width=settings['stimulus']['rect_line_width'])
+        ]
 
         # # Stimuli
         # self.stimuli = []
@@ -279,6 +307,8 @@ class LearningSession(Session):
         if self.closed:  # already closed!
             return None
 
+        # self.win.saveMovieFrames(fileName='frames/DEMO2.png')
+
         self.win.callOnFlip(self._set_exp_stop)
         self.win.flip()
         self.win.recordFrameIntervals = False
@@ -314,20 +344,29 @@ class LearningSession(Session):
         self.trials = []
 
         for index, row in this_block_design.iterrows():
+            if row['iti_posttrial'] >= 6:
+                n_trs = 5
+            else:
+                n_trs = 3
+
             this_trial_parameters = {'stimulus_symbol_left': row['stim_left'],
                                      'stimulus_symbol_right': row['stim_right'],
                                      'correct_response': row['correct_stim_lr'],
                                      'block_nr': block_nr,
                                      'p_win_left': row['p_win_left'],
                                      'p_win_right': row['p_win_right'],
-                                     'cue': row['cue_txt']}
-            phase_durations = [row['iti_pretrial'],
+                                     'cue': row['cue_txt'],
+                                     'n_trs': n_trs}
+
+            phase_durations = [row['fix_cross_1'],
                                row['cue'],
-                               row['fix_cross'],
+                               row['fix_cross_2'],
                                row['stimulus'],
+                               row['fix_cross_3'],
                                row['highlight'],
+                               row['fix_cross_4'],
                                row['feedback'],
-                               row['iti_posttrial']]
+                               100]   # show fixation cross 5 until scanner sync!
 
             self.trials.append(LearningTrial(trial_nr=int(index),
                                              parameters=this_trial_parameters,
@@ -370,7 +409,7 @@ if __name__ == '__main__':
     import datetime
     index_number = 1
     start_block = 1
-    scanner = False
+    scanner = True
     simulate = 'y'
     debug = False
 
