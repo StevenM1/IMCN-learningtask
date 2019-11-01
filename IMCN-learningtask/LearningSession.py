@@ -1,18 +1,18 @@
 from exptools2.core.session import Session
-from LearningTrial import LearningTrial
+from LearningTrial import LearningTrial, EndOfBlockTrial
 from LearningStimulus import FixationCross, LearningStimulusSingle, SelectionRectangle
 from psychopy import visual
 import pandas as pd
 import numpy as np
 import os
 import os.path as op
-import sys
 
 
 class LearningSession(Session):
 
     def __init__(self, index_number, output_str, output_dir, settings_file,
                  start_block, debug=False, scanner=False):
+        """ Scanner is a bool """
         super(LearningSession, self).__init__(output_str=output_str,
                                               output_dir=output_dir,
                                               settings_file=settings_file)
@@ -56,45 +56,57 @@ class LearningSession(Session):
 
     def load_design(self):
 
-        # if self.practice:
-        #     fn = 'sub-PRACTICE_design'
-        if self.debug:
-            fn = 'sub-DEBUG_design'
-        else:
-            fn = 'sub-' + str(self.index_number).zfill(2) + '_design'
+        fn = 'sub-' + str(self.index_number).zfill(2) + '_design'
 
-        self.design = pd.read_csv(os.path.join('designs', fn + '.csv'), sep='\t', index_col=False)
+        self.design = pd.read_csv(os.path.join('designs', fn + '.csv'), sep='\t')
         self.p_wins = self.design.p_win_correct.unique()
 
-        # For practice sessions, we want to annotate some stuff but only in the first three trials per block (?)
-        # self.design['annotate'] = False
-        # if self.practice:
-        #     for block in [1, 4]:
-        #         idx = self.design.block == block
-        #         idx = (np.cumsum(idx) > 0) & (np.cumsum(idx) < 2)  # run only the first trial annotated
-        #         self.design.loc[idx, 'annotate'] = True
-
-    def estimate_bonus(self, return_final=False):
+    def estimate_bonus(self, return_final=False,
+                       n_trials_total=None,
+                       points_per_win=100,
+                       max_reward=5,
+                       guess_rate=0.5):
         """
-        simple linear combination
-        y = a*x + b
-        a = 10/max_points
-        b = -10/2
         """
 
-        if return_final:
-            # n points if *always* chosen the right answer, based on *all* trials
-            max_points = self.design.shape[0] * np.mean(self.p_wins) * 100.
-        else:
-            # expected n points if *always* chosen the right answer, based on the number of trials so far
-            max_points = self.total_trials * np.mean(self.p_wins) * 100.
-        n_moneys = self.total_points * (10. / max_points) - 10 / 2.
-        n_moneys_capped = np.min([np.max([n_moneys, 0]), 5])  # cap at [0, 5]
+        # if return_final:
+        #     # n points if *always* chosen the right answer, based on *all* trials
+        #     max_points = self.design.shape[0] * np.mean(self.p_wins) * 100.
+        # else:
+        #     # expected n points if *always* chosen the right answer, based on the number of trials so far
+        #     max_points = self.total_trials * 0.5 * 100.
+        #
+        # n_moneys = self.total_points * (10. / max_points) - 10 / 2.
+        # n_moneys_capped = np.min([np.max([n_moneys, 0]), 5])  # cap at [0, 5]
+        #
+        # if return_final:
+        #     return max_points, n_moneys_capped
+        # else:
+        #     return n_moneys_capped
 
-        if return_final:
-            return max_points, n_moneys_capped
-        else:
-            return n_moneys_capped
+        if n_trials_total is None:
+            n_trials_total = self.total_trials
+
+        if n_trials_total == 0:
+            print('No trials were run, so no bonus')
+            return 0, 0
+
+        max_points = n_trials_total * points_per_win
+        reward_per_point = max_reward / max_points
+
+        # correct slope for guessing
+        reward_per_point = reward_per_point / guess_rate
+
+        # correct intercept for guessing
+        guess_points = max_points * guess_rate
+
+        # estimate bonus
+        bonus = (self.total_points - guess_points) * reward_per_point  # 0.02
+
+        # cap
+        bonus = np.maximum(np.minimum(bonus, max_reward), 0)
+
+        return bonus, max_points
 
     def prepare_objects(self):
         """
@@ -319,8 +331,16 @@ class LearningSession(Session):
             os.makedirs(self.output_dir)
 
         # points = self.total_points
-        # max_points, bonus = self.estimate_bonus(return_final=True)
-        # print('Total points: %d (maximum: %d), total bonus earned: %.3f' % (points, max_points, bonus))
+        bonus, max_points = self.estimate_bonus()
+        if not max_points == 0:
+            perc = self.total_points/max_points*100
+        else:
+            perc = 0
+
+        print('Total points: %d (maximum: %d; so %.3f pct), total bonus earned: %.3f' % (self.total_points,
+                                                                                         max_points,
+                                                                                         perc,
+                                                                                         bonus))
 
         self.save_data()
 
@@ -343,7 +363,7 @@ class LearningSession(Session):
         this_block_design = self.design.loc[self.design.block == block_nr]
         self.trials = []
 
-        for index, row in this_block_design.iterrows():
+        for i, (index, row) in enumerate(this_block_design.iterrows()):
             if row['iti_posttrial'] >= 6:
                 n_trs = 5
             else:
@@ -374,6 +394,10 @@ class LearningSession(Session):
                                              phase_names=self.phase_names,
                                              session=self))
 
+            if self.debug:
+                if i >= 10:
+                    break
+
     def run(self):
         """ Runs this Instrumental Learning task"""
 
@@ -396,9 +420,17 @@ class LearningSession(Session):
             # loop over trials
             for trial in self.trials:
                 trial.run()
+                self.total_trials += 1
+                self.total_points += trial.points_earned
 
             # save data
             self.save_data(block_nr=block_nr)
+
+            # show end of block screen
+            tr = EndOfBlockTrial(trial_nr=self.total_trials + 10000, parameters={},
+                                 phase_durations=[1000],
+                                 phase_names=['show_text'], session=self)
+            tr.run()
 
         self.close()
         self.quit()
@@ -407,7 +439,7 @@ class LearningSession(Session):
 if __name__ == '__main__':
 
     import datetime
-    index_number = 1
+    index_number = 2
     start_block = 1
     scanner = True
     simulate = 'y'

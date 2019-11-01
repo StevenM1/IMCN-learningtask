@@ -36,7 +36,7 @@ class LearningTrial(Trial):
                      self.session.stimuli['right'][parameters['stimulus_symbol_right']]]
 
         # Select feedback
-        self.points_earned = 0
+        self.points_earned = -100  # assuming no response. Will be overwritten with a response
         self.current_feedback = [
             self.session.feedback_outcome_objects[2],   # no choice made
             self.session.feedback_earnings_objects[2],  # -100 points
@@ -49,7 +49,7 @@ class LearningTrial(Trial):
             # sample deadline for this trial from cumulative exponential distribution, parameterized by scale=1/2.5
             # and loc = 0.75.
             # note that the maximum deadline is always 2s
-            self.deadline = 0.5   # np.min([np.random.exponential(scale=1/2.5)+.75, 2])
+            self.deadline = 0.70   # np.min([np.random.exponential(scale=1/2.5)+.75, 2])
         elif parameters['cue'] == 'ACC':
             self.current_cue = self.session.cues[1]
             self.deadline = self.phase_durations[3]
@@ -166,6 +166,7 @@ class LearningTrial(Trial):
             p_choice = self.parameters['p_win_left']
         else:
             p_choice = self.parameters['p_win_right']
+
         self.choice_outcome = np.random.binomial(1, p_choice, 1)[0]  # if participant won, this is 1
 
         # if the response was in time, the participant gains the reward
@@ -176,15 +177,15 @@ class LearningTrial(Trial):
 
         self.make_feedback_screen()
 
-        self.session.global_log.loc[idx, 'deadline'] = self.deadline
+        # self.session.global_log.loc[idx, 'deadline'] = self.deadline
         self.session.global_log.loc[idx, 'rt'] = self.response['rt']
-        self.session.global_log.loc[idx, 'rt_too_slow'] = self.response['too_slow']
-        self.session.global_log.loc[idx, 'rt_too_fast'] = self.response['too_fast']
-        self.session.global_log.loc[idx, 'rt_in_time'] = self.response['in_time']
-        self.session.global_log.loc[idx, 'choice_key'] = self.response['choice_key']
+        # self.session.global_log.loc[idx, 'rt_too_slow'] = self.response['too_slow']
+        # self.session.global_log.loc[idx, 'rt_too_fast'] = self.response['too_fast']
+        # self.session.global_log.loc[idx, 'rt_in_time'] = self.response['in_time']
+        # self.session.global_log.loc[idx, 'choice_key'] = self.response['choice_key']
         self.session.global_log.loc[idx, 'choice_direction'] = self.response['direction']
         self.session.global_log.loc[idx, 'choice_outcome'] = self.choice_outcome
-        self.session.global_log.loc[idx, 'total_points_earned'] = self.session.total_points + self.points_earned
+#        self.session.global_log.loc[idx, 'total_points_earned'] = self.session.total_points + self.points_earned
 
     def update_debug_txt(self):
 
@@ -230,8 +231,15 @@ class LearningTrial(Trial):
                 self.current_cue.draw()
 
         if self.phase == 3 or self.phase == 5:  # Draw Stimulus
+
             for stim in self.stim:
                 stim.draw()
+
+            # # Sim
+            # if not self.response_measured and self.session.timer.getTime() >= -1:
+            #     self.response_measured = True
+            #     time = self.session.clock.getTime()
+            #     self.process_response('z', time, self.session.global_log.shape[0])
 
         if self.phase == 5:  # Selection
             if self.response['direction'] is not None:
@@ -240,65 +248,6 @@ class LearningTrial(Trial):
         if self.phase == 7:  # feedback
             for fb in self.current_feedback:
                 fb.draw()
-
-#     def run(self):
-#         """ Runs through phases. Should not be subclassed unless
-#         really necessary. """
-#
-#         if self.eyetracker_on:  # Sets status message
-#             cmd = f"record_status_message 'trial {self.trial_nr}'"
-#             self.session.tracker.sendCommand(cmd)
-#
-#         # Because the first flip happens when the experiment starts,
-#         # we need to compensate for this during the first trial/phase
-#         if self.session.first_trial:
-#             # must be first trial/phase
-#             if self.timing == 'seconds':  # subtract duration of one frame
-#                 self.phase_durations[0] -= 1. / self.session.actual_framerate * 1.1  # +10% to be sure
-#             else:  # if timing == 'frames', subtract one frame
-#                 self.phase_durations[0] -= 1
-#
-#             self.session.first_trial = False
-#
-#         for phase_dur in self.phase_durations:  # loop over phase durations
-#             # pass self.phase *now* instead of while logging the phase info.
-#             self.session.win.callOnFlip(self.log_phase_info, phase=self.phase)
-#
-#             # Start loading in next trial during this phase (if not None)
-#             if self.load_next_during_phase == self.phase:
-#                 self.load_next_trial(phase_dur)
-#
-#             if self.timing == 'seconds':
-#                 # Loop until timer is at 0!
-#                 self.session.timer.add(phase_dur)
-#                 while self.session.timer.getTime() < 0 and not self.exit_phase and not self.exit_trial:
-#                     self.draw()
-#                     self.session.win.flip()
-# #                    self.session.win.getMovieFrame()  # MAKE VIDEO
-#                     self.get_events()
-#                     self.session.nr_frames += 1
-#             else:
-#                 # Loop for a predetermined number of frames
-#                 # Note: only works when you're sure you're not
-#                 # dropping frames
-#                 for _ in range(phase_dur):
-#
-#                     if self.exit_phase or self.exit_trial:
-#                         break
-#
-#                     self.draw()
-#                     self.session.win.flip()
-#                     self.get_events()
-#                     self.session.nr_frames += 1
-#
-#             if self.exit_phase:  # broke out of phase loop
-#                 self.session.timer.reset()  # reset timer!
-#                 self.exit_phase = False  # reset exit_phase
-#             if self.exit_trial:
-#                 self.session.timer.reset()
-#                 break
-#
-#             self.phase += 1  # advance phase
 
 
 class TextTrial(Trial):
@@ -337,14 +286,45 @@ class TextTrial(Trial):
                     self.stop_trial()
 
 
+class EndOfBlockTrial(TextTrial):
+
+    def __init__(self, trial_nr, parameters, phase_durations, bottom_pos=0, degrees_per_line=1, wrapWidth=100,
+                 phase_names=None, session=None, **kwargs):
+        super(EndOfBlockTrial, self).__init__(trial_nr=trial_nr, parameters=parameters, decoration_objects=(),
+                                              phase_durations=phase_durations, phase_names=phase_names,
+                                              session=session)
+
+        pts = self.session.total_points
+        if pts > 0:
+            txt = 'You earned {} points so far. Well done!'.format(pts)
+        else:
+            txt = 'You earned {} points so far'.format(pts)
+        text_per_line = ['End of this block',
+                         txt]
+        text_objects = []
+        for i, text in enumerate(text_per_line):
+            text_objects.append(visual.TextStim(self.session.win, text=text,
+                                                pos=(0, bottom_pos-i*degrees_per_line),
+                                                alignVert='bottom', wrapWidth=wrapWidth, **kwargs))
+        text_objects.append(visual.TextStim(self.session.win, text='Waiting for operator...', italic=True,
+                                            pos=(0, -5)))
+        self.decoration_objects = text_objects
+
+
 class InstructionTrial(LearningTrial):
 
     def __init__(self, trial_nr, parameters, phase_durations,
-                 decoration_objects=(), break_keys=['space'],
+                 decoration_objects=(), break_keys='space',
                  phase_names=None, session=None):
         super(InstructionTrial, self).__init__(trial_nr=trial_nr, parameters=parameters,
                                                phase_durations=phase_durations, phase_names=phase_names,
                                                session=session)
+
+        if break_keys is None:
+            break_keys = []
+        elif isinstance(break_keys, str):
+            break_keys = [break_keys]
+
         self.break_keys = break_keys
         self.decoration_objects = decoration_objects
         # self.instruction_txt = [visual.TextStim(self.session.win, text='test',
@@ -417,12 +397,12 @@ class InstructionTrial(LearningTrial):
 
     def draw(self):
 
-        for stim in self.decoration_objects:
-            stim.draw()
-
-        if self.phase == 8:
-            # also draw during feedback
-            for stim in self.stim:
+        if self.phase == 7:
+            # # also draw during feedback
+            for stim in self.decoration_objects[:-1]:
+                stim.draw()
+        else:
+            for stim in self.decoration_objects:
                 stim.draw()
 
         super(InstructionTrial, self).draw()
@@ -469,16 +449,17 @@ class CheckTrial(InstructionTrial):
             # also draw during feedback
             for stim in self.stim:
                 stim.draw()
+            self.session.selection_rectangles[self.response['direction']].draw()
 
         super(CheckTrial, self).draw()
 
 
-class PracticeTrial(LearningTrial):
-    """ Practice trials do the same as normal trials, but annotate what happens in each different phase. """
+class AnnotatedTrial(LearningTrial):
+    """ Does the same as normal trials, but annotate what happens in each different phase. """
 
     def __init__(self, trial_nr, parameters, phase_durations, annotate=True, decoration_objects=(),
                  phase_names=None, session=None):
-        super(PracticeTrial, self).__init__(trial_nr, parameters, phase_durations,
+        super(AnnotatedTrial, self).__init__(trial_nr, parameters, phase_durations,
                                             phase_names=phase_names, session=session)
 
         # prepare arrow
@@ -533,24 +514,29 @@ class PracticeTrial(LearningTrial):
                                     text='These are your choice options. Make your choice now',
                                     pos=(0, 4), units='deg')
                                     ],
+                'phase_3.5': [
+                    visual.TextStim(win=self.session.win,
+                                    text='Your choice is recorded, the trial will continue soon...',
+                                    pos=(0, 4), units='deg')
+                                    ],
                 'phase_4': [
                     visual.TextStim(win=self.session.win,
-                                    text='The symbols disappear shortly',
+                                    text='The symbols disappear',
                                     pos=(0, 4), units='deg')
                                     ],
                 'phase_5': visual.TextStim(win=self.session.win,
-                                           text='Your choice is highlighted shortly',
+                                           text='Your choice is highlighted',
                                            pos=(0, 4), units='deg'),
                 'phase_6': [
                     visual.TextStim(win=self.session.win,
-                                    text='The choice highlight disappears shortly',
+                                    text='The highlight disappears',
                                     pos=(0, 4), units='deg')
                                     ],
                 'phase_7': [
                     self.arrows[0],
                     visual.TextStim(win=self.session.win,
                                     text='This is the outcome of your choice',
-                                    pos=(6, 0), units='deg',
+                                    pos=(8, 0), units='deg',
                                     alignHoriz='left')],
                 'phase_9': [
                     self.arrows[1],
@@ -591,8 +577,8 @@ class PracticeTrial(LearningTrial):
             self.session.feedback_earnings_objects[2].draw()  # reward = 0
             self.session.feedback_timing_objects[0].draw()
 
-        if self.phase in [0, 1, 2, 4, 5, 6, 7, 9]:
-            self.forward_text.draw()
+        # if self.phase in [9]:  # [0, 1, 2, 4, 5, 6, 7, 9]:
+        #     self.forward_text.draw()
 
         # Annotations
         if self.annotate:
@@ -601,10 +587,15 @@ class PracticeTrial(LearningTrial):
                 this_phase_annotations = self.annotations[phase_n_str]
                 if not isinstance(this_phase_annotations, list):
                     this_phase_annotations = [this_phase_annotations]
+
+                if self.phase == 3 and self.response_measured:
+                    # overwrite if response is recorded
+                    this_phase_annotations = self.annotations['phase_3.5']
+
                 for annotation in this_phase_annotations:
                     annotation.draw()
 
-        super(PracticeTrial, self).draw()
+        super(AnnotatedTrial, self).draw()
 
     def get_events(self):
 
@@ -617,12 +608,14 @@ class PracticeTrial(LearningTrial):
                     self.session.quit()
                 elif ev == 'equal' or ev == '+':
                     self.stop_trial()
+                elif ev == 'minus':
+                    self.stop_phase()  #super secret key
 
-                if ev == 'space' and not self.phase == 3:
+                if ev == 'space' and self.phase == 8:
                     self.last_key = ev
                     self.stop_phase()
 
-                if ev in ['space', 'backspace'] and self.phase == 8:
+                if ev in ['space', 'backspace'] and self.phase in [10]:
                     self.last_key = ev
                     self.stop_phase()
 
@@ -637,11 +630,11 @@ class PracticeTrial(LearningTrial):
                         if not self.response_measured:
                             self.response_measured = True
                             self.process_response(ev, time, idx)
-                            core.wait(2)  # wait 2 seconds
 
-                            # Not in the MR scanner? End phase upon keypress
-                            if not self.session.in_scanner and self.phase == 3:
-                                self.stop_phase()
+                            # reset timer, add 4 seconds
+                            self.session.timer.reset()
+                            self.session.timer.add(4)
+
                 else:
                     event_type = 'non_response_keypress'
 

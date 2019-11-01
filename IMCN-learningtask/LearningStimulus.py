@@ -25,10 +25,14 @@ class LearningStimulusSingle(object):
             kws.pop('width')
             height = kws['text_height']
             kws.pop('text_height')
+
+            if stimulus in ['Z', 'z', 'q']:
+                height = height - 1.3
             self.stimulus = visual.TextStim(self.win,
                                             text=stimulus,
                                             height=height,
                                             alignHoriz='center',
+                                            alignVert='center',
                                             pos=(x_pos, 0),
                                             font='Agathodaimon',
                                             fontFiles=['./lib/AGATHODA.TTF'], **kws)
