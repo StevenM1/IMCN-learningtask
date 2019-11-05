@@ -398,7 +398,7 @@ class LearningSession(Session):
                 if i >= 10:
                     break
 
-    def run(self):
+    def run(self, quit_on_exit=True):
         """ Runs this Instrumental Learning task"""
 
         self.load_design()
@@ -427,13 +427,20 @@ class LearningSession(Session):
             self.save_data(block_nr=block_nr)
 
             # show end of block screen
-            tr = EndOfBlockTrial(trial_nr=self.total_trials + 10000, parameters={},
-                                 phase_durations=[1000],
-                                 phase_names=['show_text'], session=self)
-            tr.run()
+            if block_nr == 3:
+                tr = EndOfBlockTrial(trial_nr=self.total_trials + 10000, parameters={},
+                                     phase_durations=[1000], exp_end=True,
+                                     phase_names=['show_text'], session=self)
+                tr.run()
+            else:
+                tr = EndOfBlockTrial(trial_nr=self.total_trials + 10000, parameters={},
+                                     phase_durations=[1000],
+                                     phase_names=['show_text'], session=self)
+                tr.run()
 
         self.close()
-        self.quit()
+        if quit_on_exit:
+            self.quit()
 
 
 if __name__ == '__main__':

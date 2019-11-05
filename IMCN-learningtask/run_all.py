@@ -31,19 +31,19 @@ def main():
 
     output_str = f'sub-{index_number}_task-learning_datetime-{timestamp}'
     output_dir = './data'
-    settings_file = 'settings.yml'
+    settings_file = 'settings_simulate.yml'
 
     sess = PracticeSession(output_str=output_str,
                            output_dir=output_dir,
                            settings_file=settings_file,
                            start_block=0,
                            index_number=index_number)
-    sess.run()
+    sess.run(quit_on_exit=False)
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%m%S")
     output_str = f'sub-{index_number}_task-learning_datetime-{timestamp}'
     output_dir = './data'
-    settings_file = 'settings.yml'
+    settings_file = 'settings_simulate.yml'
 
     sess = LearningSession(scanner=True,
                            output_str=output_str,
@@ -51,7 +51,7 @@ def main():
                            settings_file=settings_file,
                            start_block=1,
                            index_number=index_number)
-    sess.run()
+    sess.run(quit_on_exit=True)
 
 
 if __name__ == '__main__':

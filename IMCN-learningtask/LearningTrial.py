@@ -42,14 +42,11 @@ class LearningTrial(Trial):
             self.session.feedback_earnings_objects[2],  # -100 points
         ]
 
-        # Select cue, define deadline
+        # Select cue, define deadline as 0.7 seconds
         if parameters['cue'] == 'SPD':
             self.current_cue = self.session.cues[0]
-            # TODO change this to a fixed deadline?
-            # sample deadline for this trial from cumulative exponential distribution, parameterized by scale=1/2.5
-            # and loc = 0.75.
             # note that the maximum deadline is always 2s
-            self.deadline = 0.70   # np.min([np.random.exponential(scale=1/2.5)+.75, 2])
+            self.deadline = 0.70
         elif parameters['cue'] == 'ACC':
             self.current_cue = self.session.cues[1]
             self.deadline = self.phase_durations[3]
@@ -177,15 +174,14 @@ class LearningTrial(Trial):
 
         self.make_feedback_screen()
 
-        # self.session.global_log.loc[idx, 'deadline'] = self.deadline
+        self.session.global_log.loc[idx, 'deadline'] = self.deadline
         self.session.global_log.loc[idx, 'rt'] = self.response['rt']
-        # self.session.global_log.loc[idx, 'rt_too_slow'] = self.response['too_slow']
-        # self.session.global_log.loc[idx, 'rt_too_fast'] = self.response['too_fast']
-        # self.session.global_log.loc[idx, 'rt_in_time'] = self.response['in_time']
-        # self.session.global_log.loc[idx, 'choice_key'] = self.response['choice_key']
+        self.session.global_log.loc[idx, 'rt_too_slow'] = self.response['too_slow']
+        self.session.global_log.loc[idx, 'rt_too_fast'] = self.response['too_fast']
+        self.session.global_log.loc[idx, 'rt_in_time'] = self.response['in_time']
         self.session.global_log.loc[idx, 'choice_direction'] = self.response['direction']
         self.session.global_log.loc[idx, 'choice_outcome'] = self.choice_outcome
-#        self.session.global_log.loc[idx, 'total_points_earned'] = self.session.total_points + self.points_earned
+        self.session.global_log.loc[idx, 'total_points_earned'] = self.session.total_points + self.points_earned
 
     def update_debug_txt(self):
 
@@ -235,11 +231,9 @@ class LearningTrial(Trial):
             for stim in self.stim:
                 stim.draw()
 
-            # # Sim
+            # # Simulate key press
             # if not self.response_measured and self.session.timer.getTime() >= -1:
-            #     self.response_measured = True
-            #     time = self.session.clock.getTime()
-            #     self.process_response('z', time, self.session.global_log.shape[0])
+            #     event._onPygletKey(symbol='z', modifiers=0, emulated=True)
 
         if self.phase == 5:  # Selection
             if self.response['direction'] is not None:
@@ -289,7 +283,7 @@ class TextTrial(Trial):
 class EndOfBlockTrial(TextTrial):
 
     def __init__(self, trial_nr, parameters, phase_durations, bottom_pos=0, degrees_per_line=1, wrapWidth=100,
-                 phase_names=None, session=None, **kwargs):
+                 exp_end=False, phase_names=None, session=None, **kwargs):
         super(EndOfBlockTrial, self).__init__(trial_nr=trial_nr, parameters=parameters, decoration_objects=(),
                                               phase_durations=phase_durations, phase_names=phase_names,
                                               session=session)
@@ -306,7 +300,15 @@ class EndOfBlockTrial(TextTrial):
             text_objects.append(visual.TextStim(self.session.win, text=text,
                                                 pos=(0, bottom_pos-i*degrees_per_line),
                                                 alignVert='bottom', wrapWidth=wrapWidth, **kwargs))
-        text_objects.append(visual.TextStim(self.session.win, text='Waiting for operator...', italic=True,
+        # text_objects.append(visual.TextStim(self.session.win, text='Waiting for operator...', italic=True,
+        #                                     pos=(0, -5)))
+        if exp_end:
+            text_objects.append(visual.TextStim(self.session.win, text='You have reached the end of the experiment! '
+                                                                       'You can go to the experiment leader now',
+                                                italic=True, pos=(0, -5)))
+        else:
+            text_objects.append(visual.TextStim(self.session.win, text='You can take a short break now. To continue, '
+                                                                       'press <space bar>', italic=True,
                                             pos=(0, -5)))
         self.decoration_objects = text_objects
 

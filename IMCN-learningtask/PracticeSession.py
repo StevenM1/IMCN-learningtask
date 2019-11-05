@@ -98,7 +98,7 @@ class PracticeSession(LearningSession):
 
         return durations
 
-    def run(self):
+    def run(self, quit_on_exit=False):
         """ Runs this Instrumental Learning practice session """
 
         # self.load_design()
@@ -210,6 +210,7 @@ class PracticeSession(LearningSession):
                         print('Not none found')
                         if tr.last_key == 'space':
                             print('I should break')
+
                             break
 
                 # check correct here, give feedback
@@ -411,7 +412,7 @@ class PracticeSession(LearningSession):
                 tr.run()
                 trial_nr += 1
 
-                for i in range(15):
+                for i in range(10):
                     symbols, ps, cue = self.get_random_cue_location(ps=[0.75, 0.25],
                                                                     symbols=[self.all_symbols[4],
                                                                              self.all_symbols[5]])
@@ -465,7 +466,7 @@ class PracticeSession(LearningSession):
 
                 trial_nr += 1
 
-                for i in range(40):
+                for i in range(30):
                     symbols, ps = self.get_random_stimuli_ps()
                     symbols, ps, cue = self.get_random_cue_location(ps=ps, symbols=symbols)
 
@@ -515,7 +516,8 @@ class PracticeSession(LearningSession):
                 break
 
         self.close()
-        self.quit()
+        if quit_on_exit:
+            self.quit()
 
 
 if __name__ == '__main__':
