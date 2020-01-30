@@ -1,4 +1,4 @@
-import sys
+import sys, os
 try:
     import exptools2
 except:

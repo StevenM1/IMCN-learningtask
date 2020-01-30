@@ -282,7 +282,8 @@ class TextTrial(Trial):
 
 class EndOfBlockTrial(TextTrial):
 
-    def __init__(self, trial_nr, parameters, phase_durations, bottom_pos=0, degrees_per_line=1, wrapWidth=100,
+    def __init__(self, trial_nr, parameters, phase_durations, in_scanner=False,
+                 bottom_pos=0, degrees_per_line=1, wrapWidth=100,
                  exp_end=False, phase_names=None, session=None, **kwargs):
         super(EndOfBlockTrial, self).__init__(trial_nr=trial_nr, parameters=parameters, decoration_objects=(),
                                               phase_durations=phase_durations, phase_names=phase_names,
@@ -300,15 +301,18 @@ class EndOfBlockTrial(TextTrial):
             text_objects.append(visual.TextStim(self.session.win, text=text,
                                                 pos=(0, bottom_pos-i*degrees_per_line),
                                                 alignVert='bottom', wrapWidth=wrapWidth, **kwargs))
-        # text_objects.append(visual.TextStim(self.session.win, text='Waiting for operator...', italic=True,
-        #                                     pos=(0, -5)))
-        if exp_end:
-            text_objects.append(visual.TextStim(self.session.win, text='You have reached the end of the experiment! '
-                                                                       'You can go to the experiment leader now',
-                                                italic=True, pos=(0, -5)))
+
+        if in_scanner:
+            text_objects.append(visual.TextStim(self.session.win, text='Waiting for operator...', italic=True,
+                                                pos=(0, -5)))
         else:
-            text_objects.append(visual.TextStim(self.session.win, text='You can take a short break now. To continue, '
-                                                                       'press <space bar>', italic=True,
+            if exp_end:
+                text_objects.append(visual.TextStim(self.session.win, text='You have reached the end of the experiment! '
+                                                                           'You can go to the experiment leader now',
+                                                    italic=True, pos=(0, -5)))
+            else:
+                text_objects.append(visual.TextStim(self.session.win, text='You can take a short break now. To continue, '
+                                                                           'press <space bar>', italic=True,
                                             pos=(0, -5)))
         self.decoration_objects = text_objects
 

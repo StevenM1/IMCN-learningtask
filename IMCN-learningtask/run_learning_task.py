@@ -31,10 +31,6 @@ def main():
     except:
         start_block = 1
 
-    if start_block > 1:
-        pass
-        # ToDo: find last run data to get points from
-
     scanner = input('Are you in the scanner? [y/n, default n]: ') or 'n'
     while not scanner in ['n', 'y']:
         print('I don''t understand that. Please enter ''y'' or ''n''.')
@@ -53,9 +49,12 @@ def main():
     if simulate == 'y':
         settings_file = 'settings_simulate.yml'
     else:
-        settings_file = 'settings.yml'
+        if scanner == 'y':
+            settings_file = 'settings_mri.yml'
+        else:
+            settings_file = 'settings.yml'
 
-    sess = LearningSession(scanner=scanner,
+    sess = LearningSession(scanner=scanner == 'y',  # pass bool here
                            output_str=output_str,
                            output_dir=output_dir,
                            settings_file=settings_file,

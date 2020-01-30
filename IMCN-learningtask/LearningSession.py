@@ -429,12 +429,12 @@ class LearningSession(Session):
             # show end of block screen
             if block_nr == 3:
                 tr = EndOfBlockTrial(trial_nr=self.total_trials + 10000, parameters={},
-                                     phase_durations=[1000], exp_end=True,
+                                     phase_durations=[1000], exp_end=True, in_scanner=self.in_scanner,
                                      phase_names=['show_text'], session=self)
                 tr.run()
             else:
                 tr = EndOfBlockTrial(trial_nr=self.total_trials + 10000, parameters={},
-                                     phase_durations=[1000],
+                                     phase_durations=[1000], in_scanner=self.in_scanner,
                                      phase_names=['show_text'], session=self)
                 tr.run()
 
