@@ -87,8 +87,8 @@ class LearningTrial(Trial):
                             self.process_response(ev, time, idx)
 
                             # Not in the MR scanner? End phase upon keypress
-                            # if not self.session.in_scanner and self.phase == 3:
-                            #     self.stop_phase()
+                            if self.phase == 3:
+                                self.stop_phase()
                 else:
                     event_type = 'non_response_keypress'
 
@@ -119,22 +119,23 @@ class LearningTrial(Trial):
         elif not self.choice_outcome:
             self.current_feedback.append(self.session.feedback_outcome_objects[0])
 
-        # 2. How many points were actually earned?
-        if self.response['too_fast']:
-            self.current_feedback.append(self.session.feedback_earnings_objects[0])
-        elif self.response['too_slow']:
-            self.current_feedback.append(self.session.feedback_earnings_objects[2])
-        else:
-            if self.choice_outcome:
-                self.current_feedback.append(self.session.feedback_earnings_objects[1])
-            else:
+        if self.session.show_timing_feedback:
+            # 2. How many points were actually earned?
+            if self.response['too_fast']:
                 self.current_feedback.append(self.session.feedback_earnings_objects[0])
+            elif self.response['too_slow']:
+                self.current_feedback.append(self.session.feedback_earnings_objects[2])
+            else:
+                if self.choice_outcome:
+                    self.current_feedback.append(self.session.feedback_earnings_objects[1])
+                else:
+                    self.current_feedback.append(self.session.feedback_earnings_objects[0])
 
-        # 3. Too slow / too fast?
-        if self.response['too_slow']:
-            self.current_feedback.append(self.session.feedback_timing_objects[0])
-        if self.response['too_fast']:
-            self.current_feedback.append(self.session.feedback_timing_objects[1])
+            # 3. Too slow / too fast?
+            if self.response['too_slow']:
+                self.current_feedback.append(self.session.feedback_timing_objects[0])
+            if self.response['too_fast']:
+                self.current_feedback.append(self.session.feedback_timing_objects[1])
 
     def process_response(self, ev, time, idx):
         """ Processes a response:
@@ -242,6 +243,9 @@ class LearningTrial(Trial):
         if self.phase == 7:  # feedback
             for fb in self.current_feedback:
                 fb.draw()
+
+        if self.phase == 8 and not self.session.run_scanner_design:
+            self.stop_trial()
 
 
 class TextTrial(Trial):
@@ -377,7 +381,7 @@ class InstructionTrial(LearningTrial):
                             self.process_response(ev, time, idx)
 
                             # Not in the MR scanner? End phase upon keypress
-                            if not self.session.in_scanner and self.phase == 3:
+                            if not self.session.run_scanner_design and self.phase == 3:
                                 self.stop_phase()
                 else:
                     event_type = 'non_response_keypress'
@@ -638,8 +642,12 @@ class AnnotatedTrial(LearningTrial):
                             self.process_response(ev, time, idx)
 
                             # reset timer, add 4 seconds
-                            self.session.timer.reset()
-                            self.session.timer.add(4)
+                            # self.session.timer.reset()
+                            # self.session.timer.add(4)
+
+                            # Not in the MR scanner? End phase upon keypress
+                            if self.phase == 3:
+                                self.stop_phase()
 
                 else:
                     event_type = 'non_response_keypress'

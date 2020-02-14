@@ -6,21 +6,58 @@ import pandas as pd
 import numpy as np
 import os
 import os.path as op
+import warnings
 
 
 class LearningSession(Session):
+    """
+    Can run both a reversal learning version and an SAT version of the instrumental learning task.
 
-    def __init__(self, index_number, output_str, output_dir, settings_file,
-                 start_block, debug=False, scanner=False):
-        """ Scanner is a bool """
+    Parameters
+    ----------------
+    output_str: str
+        String specifying the output files (data, log) names
+    output_dir: str
+        String pointing to the directory to save output files
+    settings_file: str
+        String specifying yaml-file with global settings as applied to the current task
+    design_fn: str
+        String pointing to a .csv file (tab-separated) that specifies trial-by-trial parameters
+    start_block: int {1, 2, 3}
+        First block to run, useful for restarting in a later block (eg due a crash)
+    age: int
+        Age of participant. Is appended to output data files.
+    gender: str {f, m, na}
+        Gender of participant. Is appeneded to output data files.
+    show_timing_feedback: bool
+        Show feedback on response time? Should be True for the SAT experiment, False for the Reversal Learning exp
+    debug: bool
+        Debug mode? Shows a debug text within each trial, and runs only 10 trials per block.
+    run_scanner_design: bool
+        Is this an MR design? If False, the stimulus presentation ends upon a response keypress.
+    scanner: bool
+        Is the participant in the scanner? If True, the end-of-block message prints "Waiting for operator..."
+        instead of "End of the block, you can take a short break now. Press <space bar> to continue".
+    """
+
+    def __init__(self, output_str, output_dir, settings_file, design_fn=None,
+                 start_block=1, age=None, gender=None, show_timing_feedback=True, debug=False,
+                 run_scanner_design=False, scanner=False):
+
         super(LearningSession, self).__init__(output_str=output_str,
                                               output_dir=output_dir,
                                               settings_file=settings_file)
 
-        self.index_number = index_number  # participant number
-        self.start_block = start_block    # allows for starting at a later block than 1
+        self.start_block = start_block
         self.debug = debug
         self.in_scanner = scanner
+        self.run_scanner_design = run_scanner_design
+        self.show_timing_feedback = show_timing_feedback
+        self.design_fn = design_fn
+        self.gender = gender
+        self.age = age
+
+        # Declare some attributes
         self.design = None
         self.p_wins = None
         self.trials = None
@@ -29,6 +66,19 @@ class LearningSession(Session):
         self.total_points = 0
         self.total_trials = 0
 
+        # Some checks
+        if self.in_scanner and not self.run_scanner_design:
+            raise(IOError('You cannot be in the scanner but not run a scanner design.'))
+
+        if self.design_fn is None:
+            fn = f'./designs/sub-1_design.csv'
+            warnings.warn('design_fn not provided, assuming it is {}'.format(fn))
+            if os.path.exists(fn):
+                self.design_fn = fn
+            else:
+                raise(IOError('Design file not found!'))
+
+        # Find response button signs
         self.response_button_signs = [self.settings['input']['response_button_left'],
                                       self.settings['input']['response_button_right']]
 
@@ -42,8 +92,9 @@ class LearningSession(Session):
                                          0.5,   # phase 6: choice highlight
                                          0.5,   # phase 7: fix cross4
                                          0.5,   # phase 8: feedback
-                                         1      # phase 9: fix cross5 (ITI posttrial)
+                                         1      # phase 9: fix cross5 (ITI post-trial)
                                          ])
+
         self.phase_names = ['fix_cross_1',
                             'cue',
                             'fix_cross_2',
@@ -55,35 +106,29 @@ class LearningSession(Session):
                             'fix_cross_5']
 
     def load_design(self):
-
-        fn = 'sub-' + str(self.index_number).zfill(2) + '_design'
-
-        self.design = pd.read_csv(os.path.join('designs', fn + '.csv'), sep='\t')
+        self.design = pd.read_csv(self.design_fn, sep='\t')
         self.p_wins = self.design.p_win_correct.unique()
 
-    def estimate_bonus(self, return_final=False,
+        # check for NaN-values in the stimulus probabilities
+        for colname in ['stim_high', 'stim_low', 'stim_left', 'stim_high']:
+            if pd.isnull(self.design[colname]).any():
+                raise(IOError("NaNs found in column {} of the design file. I won't start because I will "
+                              "crash".format(colname)))
+
+        # check if every phase is in the design file, if not, assume the phase has duration 0
+        for phase_name in self.phase_names + ['iti_posttrial']:
+            if phase_name not in self.design.columns:
+                warnings.warn('WARNING: phase {} not found in design, assuming its duration is 0'.format(phase_name))
+                self.design[phase_name] = 0
+            self.design.loc[self.design[phase_name] < 0, phase_name] = 0
+
+    def estimate_bonus(self,
                        n_trials_total=None,
                        points_per_win=100,
                        max_reward=5,
                        guess_rate=0.5):
         """
         """
-
-        # if return_final:
-        #     # n points if *always* chosen the right answer, based on *all* trials
-        #     max_points = self.design.shape[0] * np.mean(self.p_wins) * 100.
-        # else:
-        #     # expected n points if *always* chosen the right answer, based on the number of trials so far
-        #     max_points = self.total_trials * 0.5 * 100.
-        #
-        # n_moneys = self.total_points * (10. / max_points) - 10 / 2.
-        # n_moneys_capped = np.min([np.max([n_moneys, 0]), 5])  # cap at [0, 5]
-        #
-        # if return_final:
-        #     return max_points, n_moneys_capped
-        # else:
-        #     return n_moneys_capped
-
         if n_trials_total is None:
             n_trials_total = self.total_trials
 
@@ -122,30 +167,14 @@ class LearningSession(Session):
                                             bg=settings['fixation_cross']['bg'])
         self.default_fix = self.fixation_cross  # overwrite
 
-        # checkout if stimulus type is interpreted
-        # if not settings['stimulus']['type'] in ['agathodaimon']:
-        #     raise(IOError('No idea what stimulus type I should draw. '
-        #                   'You entered %s' % settings['stimulus']['type']))
-        # checkout if colors exist
-        # if settings['stimulus']['type'] == 'colors':
-        #     import matplotlib.colors as mcolors
-        #     for set_n in ['set_1', 'set_2', 'set_3']:
-        #         for col in settings['stimulus'][set_n]:
-        #             if not col in mcolors.CSS4_COLORS.keys():
-        #                 raise(IOError('I dont understand color %s that was '
-        #                               'provided to stimulus set %s...' %(col, set_n)))
-
-        # load all possible stimuli
-        # all_stim = []
-        # for set_n in range(10):
-        #     # assume a maximum of 10 sets, bit arbitrary but seems enough
-        #     if config.has_option('stimulus', 'set_%d' % set_n):
-        #         all_stim.append(config.get('stimulus', 'set_%d' % set_n))
-        #
-        # if counterbalance:
-        #     # counterbalance, based on index_num
-        #     ###### WARNING: This is set-up to be specific for my experiment #######
-        #     all_stim = self.counterbalance_stimuli(all_stim)
+        # checkout if stimulus font can be interpreted
+        if settings['stimulus']['font'] not in ['Agathodaimon', 'Glagolitsa']:
+            raise(IOError('Font should be either ''Agathodaimon'' or ''Glagolitsa''. You entered {} in the '
+                          'settings yml-file'.format(settings['stimulus']['font'])))
+        if not os.path.exists(settings['stimulus']['font_fn']):
+            raise(IOError('Font .ttf-file could not be found! {} '
+                          'is not an existing path. Please edit the settings yml-file or add the missing '
+                          '.ttf-file'.format(settings['stimulus']['font_fn'])))
 
         # let's find all stimuli first from dataframe
         all_stimuli = np.unique(np.hstack([self.design.stim_high.unique(), self.design.stim_low.unique()]))
@@ -155,14 +184,15 @@ class LearningSession(Session):
             for i, location in enumerate(['left', 'right']):
                 self.stimuli[location][stimulus] = LearningStimulusSingle(
                     win=self.win,
-                    stimulus=stimulus,
-                    stimulus_type='agathodaimon',
+                    stimulus_type='symbol',
+                    stimulus=stimulus,                                  # actual string character used, eg 'f', 'a'
+                    font=settings['stimulus']['font'],                  # name of font to used display character
+                    fontFiles=[settings['stimulus']['font_fn']],        # path of font .ttf used to display character
                     width=settings['stimulus']['width'],
                     height=settings['stimulus']['height'],
                     text_height=settings['stimulus']['text_height'],
                     units=settings['stimulus']['units'],
-                    x_pos=settings['stimulus']['x_pos'][i],
-                    rect_line_width=settings['stimulus']['rect_line_width'])
+                    x_pos=settings['stimulus']['x_pos'][i])
 
         self.selection_rectangles = [
             SelectionRectangle(win=self.win,
@@ -181,35 +211,19 @@ class LearningSession(Session):
                                rect_line_width=settings['stimulus']['rect_line_width'])
         ]
 
-        # # Stimuli
-        # self.stimuli = []
-        # for stim in all_stim:
-        #     self.stimuli.append(
-        #         LearningStimulus(self.screen,
-        #                          stimulus_type=config.get('stimulus', 'type'),
-        #                          width=config.get('stimulus', 'width'),
-        #                          height=config.get('stimulus', 'height'),
-        #                          set=stim,
-        #                          text_height=config.get('stimulus', 'text_height'),
-        #                          units=config.get('stimulus', 'units'),
-        #                          x_pos=config.get('stimulus', 'x_pos'),
-        #                          rect_line_width=config.get('stimulus', 'rect_line_width')))
+        # Prepare feedback stimuli. Rendering of text is slow so better to do this once only (not every trial)
+        if self.show_timing_feedback:
+            outcome_feedback_str = 'Outcome: '
+        else:
+            outcome_feedback_str = 'Reward: '
 
-        # load instruction screen pdfs
-        self.instruction_screens = [
-            visual.ImageStim(self.win, image='./lib/vanilla.png'),
-            visual.ImageStim(self.win, image='./lib/sat.png')
-        ]
-
-        # Prepare feedback stimuli. Rendering of text is supposedly slow so better to do this once only (not every
-        # trial)
         # 1. Feedback on outcomes
         self.feedback_outcome_objects = [
-            visual.TextStim(win=self.win, text='Outcome: 0',  color='darkred',
+            visual.TextStim(win=self.win, text=outcome_feedback_str + '0',  color='darkred',
                             units=self.settings['text']['units'],
                             height=self.settings['text']['height'],
                             pos=(0, self.settings['text']['feedback_y_pos'][0])),
-            visual.TextStim(win=self.win, text='Outcome: +100', color='darkgreen',
+            visual.TextStim(win=self.win, text=outcome_feedback_str + '+100', color='darkgreen',
                             units=self.settings['text']['units'],
                             height=self.settings['text']['height'],
                             pos=(0, self.settings['text']['feedback_y_pos'][0])),
@@ -269,16 +283,16 @@ class LearningSession(Session):
                                                    alignHoriz='center')
 
         if self.debug:
-             pos = -settings['window']['size'][0]/3, settings['window']['size'][1]/3
-             self.debug_txt = visual.TextStim(win=self.win,
-                                              alignVert='top',
-                                              text='debug mode\n',
-                                              name='debug_txt',
-                                              units='pix',  # config.get('text', 'units'),
-                                              font='Helvetica Neue',
-                                              pos=pos,
-                                              height=14,  # config.get('text', 'height'),
-                                              alignHoriz='center')
+            pos = -settings['window']['size'][0]/3, settings['window']['size'][1]/3
+            self.debug_txt = visual.TextStim(win=self.win,
+                                             alignVert='top',
+                                             text='debug mode\n',
+                                             name='debug_txt',
+                                             units='pix',  # config.get('text', 'units'),
+                                             font='Helvetica Neue',
+                                             pos=pos,
+                                             height=14,  # config.get('text', 'height'),
+                                             alignHoriz='center')
 
     def save_data(self, block_nr=None):
 
@@ -302,6 +316,8 @@ class LearningSession(Session):
 
         # Round for readability and save to disk
         global_log = global_log.round({'onset': 5, 'onset_abs': 5, 'duration': 5})
+        global_log['gender'] = self.gender
+        global_log['age'] = self.age
 
         if block_nr is None:
             f_out = op.join(self.output_dir, self.output_str + '_events.tsv')
@@ -364,6 +380,7 @@ class LearningSession(Session):
         self.trials = []
 
         for i, (index, row) in enumerate(this_block_design.iterrows()):
+            # ToDo: Fix this for the MR session!
             if row['iti_posttrial'] >= 6:
                 n_trs = 5
             else:
@@ -414,7 +431,8 @@ class LearningSession(Session):
             if self.exp_start is None:
                 self.start_experiment()
 
-            self.display_text('Waiting for scanner', keys=self.mri_trigger)
+            if self.run_scanner_design:
+                self.display_text('Waiting for scanner', keys=self.mri_trigger)
             self.timer.reset()
 
             # loop over trials
@@ -442,32 +460,6 @@ class LearningSession(Session):
         if quit_on_exit:
             self.quit()
 
-
-if __name__ == '__main__':
-
-    import datetime
-    index_number = 2
-    start_block = 1
-    scanner = True
-    simulate = 'y'
-    debug = False
-
-    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%m%S")
-    output_str = f'sub-{index_number}_task-learning_datetime-{timestamp}'
-    output_dir = './data'
-    if simulate == 'y':
-        settings_file = '/Users/steven/Sync/PhDprojects/IMCN-learningtask/IMCN-learningtask/settings_simulate.yml'
-    else:
-        settings_file = '/Users/steven/Sync/PhDprojects/IMCN-learningtask/IMCN-learningtask/settings.yml'
-
-    sess = LearningSession(scanner=scanner,
-                           output_str=output_str,
-                           output_dir=output_dir,
-                           settings_file=settings_file,
-                           start_block=start_block,
-                           debug=debug,
-                           index_number=index_number)
-    sess.run()
 
 # if __name__ == '__main__':
 #     from psychopy import core

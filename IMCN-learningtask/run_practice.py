@@ -35,7 +35,7 @@ def main():
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%m%S")
     output_str = f'sub-{index_number}_task-learning-practice_datetime-{timestamp}'
     output_dir = './data'
-    settings_file = 'settings.yml'
+    settings_file = 'settings.yml'  # todo: add session
 
     sess = PracticeSession(output_str=output_str,
                            output_dir=output_dir,
