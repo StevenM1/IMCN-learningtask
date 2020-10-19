@@ -61,6 +61,11 @@ def run_learning(task_name, index_number, age, gender, start_block, dir='.'):
     use_font = 'Agathodaimon'
     use_font_fn = os.path.join(dir, 'lib', 'AGATHODA.TTF')
 
+    # check dirs, make them if not present
+    for dir_name in ['tmp_settings_directory', output_dir]:
+        if not os.path.exists(dir_name):
+            os.makedirs(dir_name)
+
     with open(settings_template, 'r') as stream:
         settings = yaml.load(stream)
     settings['stimulus']['font'] = use_font

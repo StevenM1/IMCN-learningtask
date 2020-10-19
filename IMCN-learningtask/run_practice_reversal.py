@@ -24,7 +24,7 @@ def run_practice(index_number, SAT_first, practice_n, dir):
     # check dirs, make them if not present
     for dir_name in ['tmp_settings_directory', output_dir]:
         if not os.path.exists(dir_name):
-            os.makedirs()
+            os.makedirs(dir_name)
 
     with open(settings_template, 'r') as stream:
         settings = yaml.load(stream)
