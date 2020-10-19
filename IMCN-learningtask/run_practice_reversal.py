@@ -13,7 +13,7 @@ from run_learning_SAT import input_must_be, input_int
 
 def run_practice(index_number, SAT_first, practice_n, dir):
 
-    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%m%S")
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     output_str = f'sub-{index_number}_task-learning-practice_datetime-{timestamp}'
     output_dir = os.path.join(dir, 'data_practice-learning')
 

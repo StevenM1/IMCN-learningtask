@@ -50,7 +50,7 @@ def run_learning(task_name, index_number, age, gender, start_block, dir='.'):
                              f'sub-{subject_str}_task-{task_name}_design.csv')
 
     # set-up output file names
-    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%m%S")
+    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     output_str = f'sub-{subject_str}_task-{task_name}_datetime-{timestamp}'
     output_dir = os.path.join(dir, f'data_{task_name}')
 
