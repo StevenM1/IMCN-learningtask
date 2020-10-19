@@ -12,6 +12,7 @@ from run_learning_SAT import input_must_be, input_int
 
 
 def run_practice(index_number, SAT_first, practice_n, dir):
+
     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%m%S")
     output_str = f'sub-{index_number}_task-learning-practice_datetime-{timestamp}'
     output_dir = os.path.join(dir, 'data_practice-learning')
@@ -19,6 +20,11 @@ def run_practice(index_number, SAT_first, practice_n, dir):
     settings_template = os.path.join(dir, 'default_settings_practice.yml')
     settings_fn = os.path.join(dir, 'tmp_settings_directory',
                                f'sub-{index_number}_task-learning-practice_settings.yml')
+
+    # check dirs, make them if not present
+    for dir_name in ['tmp_settings_directory', output_dir]:
+        if not os.path.exists(dir_name):
+            os.makedirs()
 
     with open(settings_template, 'r') as stream:
         settings = yaml.load(stream)
