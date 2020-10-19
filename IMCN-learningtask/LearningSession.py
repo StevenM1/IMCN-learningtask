@@ -70,14 +70,6 @@ class LearningSession(Session):
         if self.in_scanner and not self.run_scanner_design:
             raise(IOError('You cannot be in the scanner but not run a scanner design.'))
 
-        if self.design_fn is None:
-            fn = f'./designs/sub-1_design.csv'
-            warnings.warn('design_fn not provided, assuming it is {}'.format(fn))
-            if os.path.exists(fn):
-                self.design_fn = fn
-            else:
-                raise(IOError('Design file not found!'))
-
         # Find response button signs
         self.response_button_signs = [self.settings['input']['response_button_left'],
                                       self.settings['input']['response_button_right']]
@@ -106,6 +98,15 @@ class LearningSession(Session):
                             'fix_cross_5']
 
     def load_design(self):
+        # check for existence
+        if self.design_fn is None:
+            fn = f'./designs/sub-1_design.csv'
+            warnings.warn('design_fn not provided, assuming it is {}'.format(fn))
+            if os.path.exists(fn):
+                self.design_fn = fn
+            else:
+                raise(IOError('Design file not found!'))
+
         self.design = pd.read_csv(self.design_fn, sep='\t')
         self.p_wins = self.design.p_win_correct.unique()
 
@@ -380,11 +381,6 @@ class LearningSession(Session):
         self.trials = []
 
         for i, (index, row) in enumerate(this_block_design.iterrows()):
-            # ToDo: Fix this for the MR session!
-            if row['iti_posttrial'] >= 6:
-                n_trs = 5
-            else:
-                n_trs = 3
 
             this_trial_parameters = {'stimulus_symbol_left': row['stim_left'],
                                      'stimulus_symbol_right': row['stim_right'],
@@ -393,7 +389,7 @@ class LearningSession(Session):
                                      'p_win_left': row['p_win_left'],
                                      'p_win_right': row['p_win_right'],
                                      'cue': row['cue_txt'],
-                                     'n_trs': n_trs}
+                                     'n_trs': row['n_trs']}
 
             phase_durations = [row['fix_cross_1'],
                                row['cue'],
@@ -445,14 +441,15 @@ class LearningSession(Session):
             self.save_data(block_nr=block_nr)
 
             # show end of block screen
-            if block_nr == 3:
+            if block_nr == self.design['block'].max():
+                # end the experiment, saying "You've reached the end of this part of the experiment!"
                 tr = EndOfBlockTrial(trial_nr=self.total_trials + 10000, parameters={},
-                                     phase_durations=[1000], exp_end=True, in_scanner=self.in_scanner,
+                                     phase_durations=[10000], exp_end=True, in_scanner=self.in_scanner,
                                      phase_names=['show_text'], session=self)
                 tr.run()
             else:
                 tr = EndOfBlockTrial(trial_nr=self.total_trials + 10000, parameters={},
-                                     phase_durations=[1000], in_scanner=self.in_scanner,
+                                     phase_durations=[10000], in_scanner=self.in_scanner,
                                      phase_names=['show_text'], session=self)
                 tr.run()
 

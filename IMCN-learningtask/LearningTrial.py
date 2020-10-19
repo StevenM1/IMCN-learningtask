@@ -87,7 +87,7 @@ class LearningTrial(Trial):
                             self.process_response(ev, time, idx)
 
                             # Not in the MR scanner? End phase upon keypress
-                            if self.phase == 3:
+                            if self.stop_on_tr is None:
                                 self.stop_phase()
                 else:
                     event_type = 'non_response_keypress'
@@ -311,8 +311,8 @@ class EndOfBlockTrial(TextTrial):
                                                 pos=(0, -5)))
         else:
             if exp_end:
-                text_objects.append(visual.TextStim(self.session.win, text='You have reached the end of the experiment! '
-                                                                           'You can go to the experiment leader now',
+                text_objects.append(visual.TextStim(self.session.win, text='You have reached the end of this task! '
+                                                                           'Press <space bar> to continue',
                                                     italic=True, pos=(0, -5)))
             else:
                 text_objects.append(visual.TextStim(self.session.win, text='You can take a short break now. To continue, '
@@ -642,12 +642,12 @@ class AnnotatedTrial(LearningTrial):
                             self.process_response(ev, time, idx)
 
                             # reset timer, add 4 seconds
-                            # self.session.timer.reset()
-                            # self.session.timer.add(4)
+                            self.session.timer.reset()
+                            self.session.timer.add(4)
 
                             # Not in the MR scanner? End phase upon keypress
-                            if self.phase == 3:
-                                self.stop_phase()
+                            # if self.phase == 3:
+                            #     self.stop_phase()
 
                 else:
                     event_type = 'non_response_keypress'

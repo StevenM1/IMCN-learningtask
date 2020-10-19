@@ -7,16 +7,72 @@ import pandas as pd
 
 
 class PracticeSession(LearningSession):
+    """
+    This code introduces the instrumental learning task and gives participants the chance to practice.
+    It shows up to 20 different little "blocks", which range in complexity from showing a single screen to practicing
+    15 trials.
 
-    def __init__(self, index_number, output_str, output_dir, settings_file,
-                 start_block):
-        super(PracticeSession, self).__init__(index_number=index_number,
-                                              start_block=start_block,
+    All screens:
+    0: "Welcome to this practice session"
+    1: "Important to read instructions carefully"
+    2: "You will see two choice options"
+    3: "These act like slot machines in a casino"
+    4: "The probability of getting a reward differs per symbol"
+    5: Practice single symbol 1
+    6: "It\'s important to realise that:"
+    7: "Let's practice again"
+    8: Introduce differing symbols
+    9: Practice 15 trials with differing symbols
+
+    ------ Screens below introduce the SAT cues
+    10: 'Alright, well done so far!' 'The final aspect of the task are the *cues*'
+    11: 'Cues instruct you to ...'
+    12: 'Following the SPD / ACC cues is important!'
+    13: Let's see how this works
+    14: Slow example trial / "video"
+    15: Let's practice for real, 15 trials
+    16: You're ready to start SAT
+
+    ------ Screens below re-cap the task, in case the task order is SAT - reversal
+    17: Next, you will again perform the symbol-learning task. This time, there will be no cues. Always respond as fast
+    as possible without making mistakes. Just as a recap, you will now practice 15 trials again.
+    18: You're ready for the Reversal task
+
+    ------ Screen below recaps the task, in case the task order is reversal - SAT
+    19: Next, you will again perform the symbol-learning task. However, it will be a bit more complex than before,
+    since you will be presented with *cues*.
+
+    """
+    def __init__(self, output_str, output_dir, settings_file,
+                 start_block, practice_n = 1, SAT_first=True):
+        super(PracticeSession, self).__init__(start_block=start_block,
                                               output_str=output_str + '_practice',
                                               output_dir=output_dir,
                                               settings_file=settings_file,
                                               debug=False,
                                               scanner=False)
+        self.practice_n = practice_n
+        self.SAT_first = SAT_first
+
+        if self.practice_n == 1:
+            if self.SAT_first:
+                self.presentation_order = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+            else:
+                self.presentation_order = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 18]
+
+        elif self.practice_n == 2:
+            if self.SAT_first:
+                self.presentation_order = [17, 9, 18]
+            else:
+                self.presentation_order = [19, 11, 12, 13, 14, 15, 16]
+
+        self.response_button_signs = [self.settings['input']['response_button_left'],
+                                      self.settings['input']['response_button_right']]
+
+        self.stop = False
+        self.session_location_idx = self.start_block
+        self.session_location = self.presentation_order[self.session_location_idx]
+        self.show_timing_feedback = False
 
     def prepare_objects(self):
         """
@@ -87,34 +143,47 @@ class PracticeSession(LearningSession):
         """ Generates some simple, jittered durations """
 
         durations = np.zeros(9)
-        durations[0] = np.random.choice([.5, 1.25, 2])        # pre-cue
+        durations[0] = np.random.choice([0.5, 1, 1.5, 2])     # pre-cue
         durations[1] = 1 if include_cue else 0                # cue
-        durations[2] = 0  # np.random.choice([.5, 1.25, 2])   # jitter cue-stimulus
+        durations[2] = np.random.choice([0.5, 1, 1.5, 2])     # jitter cue-stimulus
         durations[3] = 1.5                                    # stimulus
-        durations[4] = 0  # np.random.choice([0, 1, 1.5])     # jitter stim-highlight
-        durations[5] = 1                                      # highlight
+        durations[4] = np.random.choice([0.5, 1, 1.5, 2])     # jitter stim-highlight
+        durations[5] = 0 #1                                   # highlight
         durations[6] = 0  # np.random.choice([0, 1, 1.5])     # jitter highlight-feedback
         durations[7] = 1                                      # feedback
         durations[8] = 0  # np.random.choice([0, 1, 1.5])     # iti
 
         return durations
 
+    def move_forward(self):
+        if self.session_location_idx == (len(self.presentation_order)-1):
+            # can't move forward, end is reached
+            self.stop = True
+            return 0
+
+        self.session_location_idx += 1  # np.min(len(self.presentation_order), self.session_location_idx+1)
+        self.session_location = self.presentation_order[self.session_location_idx]
+
+    def move_backward(self):
+        self.session_location_idx = np.max([0, self.session_location_idx-1])  # prevent moving below 0
+        self.session_location = self.presentation_order[self.session_location_idx]
+
     def run(self, quit_on_exit=False):
         """ Runs this Instrumental Learning practice session """
 
-        # self.load_design()
         self.prepare_objects()
         self.start_experiment()
 
-        self.display_wait_text(text='Welcome to this practice session!', keys='space',
-                               stims_to_draw=[self.continue_instruction], pos=(0, 3))
-
-        self.display_wait_text(text=' ',
-                               text_per_line=['It is important that you understand the task well.',
-                                              'Please read these instructions carefully, ',
-                                              'and do not hesitate to ask any questions if anything is unclear'],
-                               keys='space',
-                               stims_to_draw=[self.continue_instruction], pos=(0, 3))
+        #
+        # self.display_wait_text(text='Welcome to this practice session!', keys='space',
+        #                        stims_to_draw=[self.continue_instruction], pos=(0, 3))
+        #
+        # self.display_wait_text(text=' ',
+        #                        text_per_line=['It is important that you understand the task well.',
+        #                                       'Please read these instructions carefully, ',
+        #                                       'and do not hesitate to ask any questions if anything is unclear'],
+        #                        keys='space',
+        #                        stims_to_draw=[self.continue_instruction], pos=(0, 3))
 
         continue_back = [self.continue_instruction, self.back_instruction]
         continue_only = [self.continue_instruction]
@@ -122,10 +191,32 @@ class PracticeSession(LearningSession):
         loop_2_done = False
         answer_1_checked = False
         answer_2_checked = False
-        session_location = self.start_block
         trial_nr = 0
+
+        # start main loop
         while True:
-            if session_location == 0:
+            if self.session_location == 0:
+                next_texts = self.generate_text_objects(['Welcome to this practice session!'])
+                tr = TextTrial(trial_nr=trial_nr,
+                               parameters={},
+                               phase_durations=[300],
+                               decoration_objects=next_texts + continue_only,
+                               session=self)
+                tr.run()
+
+            elif self.session_location == 1:
+                next_texts = self.generate_text_objects([
+                                              'It is important that you understand the task well.',
+                                              'Please read these instructions carefully, ',
+                                              'and do not hesitate to ask any questions if anything is unclear'])
+                tr = TextTrial(trial_nr=trial_nr,
+                               parameters={},
+                               phase_durations=[300],
+                               decoration_objects=next_texts + continue_only,
+                               session=self)
+                tr.run()
+
+            elif self.session_location == 2:
                 next_texts = self.generate_text_objects(['You will see two choice options, such as these'])
                 tr = TextTrial(trial_nr=trial_nr,
                                parameters={},
@@ -135,7 +226,8 @@ class PracticeSession(LearningSession):
                                                    next_texts + continue_only,
                                session=self)
                 tr.run()
-            elif session_location == 1:
+
+            elif self.session_location == 3:
                 next_texts = self.generate_text_objects(['These act like slot machines in a casino',
                                                          'On every attempt, you have a chance to get a reward'])
                 tr = TextTrial(trial_nr=trial_nr,
@@ -143,10 +235,11 @@ class PracticeSession(LearningSession):
                                phase_durations=[60],
                                decoration_objects=[self.stimuli['left'][self.all_symbols[0]],
                                                    self.stimuli['right'][self.all_symbols[1]]] +
-                                                  next_texts + continue_back,
+                                                   next_texts + continue_back,
                                session=self)
                 tr.run()
-            elif session_location == 2:
+
+            elif self.session_location == 4:
                 next_texts = self.generate_text_objects(
                     ['The probability of getting a reward differs per symbol',
                      'You need to discover, by trial and error, which symbol',
@@ -160,10 +253,12 @@ class PracticeSession(LearningSession):
                                                   next_texts + continue_back,
                                session=self)
                 tr.run()
-            elif session_location == 3:
+
+            elif self.session_location == 5:
                 next_texts = self.generate_text_objects(
                     ['Let\'s practice this for a bit to give you a feeling how this works!',
-                     'Make a couple choices by pressing <z> for left or <m> for right',
+                     'Make a couple choices by pressing <{}> for left or <{}> for right'.format(
+                         self.response_button_signs[0], self.response_button_signs[1])  ,
                      'After every choice, you will see whether you got a reward (+100) or '
                      'not (+0)'],
                     bottom_pos=5)
@@ -179,12 +274,13 @@ class PracticeSession(LearningSession):
                     for _ in range(10):
                         tr = InstructionTrial(trial_nr=trial_nr,
                                               parameters={'cue': '',  # for compatibility
-                                                          'block_nr': session_location,  # for compatibility
+                                                          'block_nr': self.session_location,  # for compatibility
                                                           'stimulus_symbol_left': self.all_symbols[0],
                                                           'stimulus_symbol_right': self.all_symbols[1],
                                                           'p_win_left': 0.8,
                                                           'p_win_right': 0.2},
-                                              phase_durations=[0.000, 0.000, 0.000, 60, 0, 1, 0, 1, 0],
+#                                              phase_durations=[0.000, 0.000, 0.000, 60, 0, 1, 0, 1, 0],
+                                              phase_durations=[0.000, 0.000, 0.000, 60, 0, 0, 0, 1, 0],
                                               phase_names=self.phase_names,
                                               session=self,
                                               decoration_objects=next_texts + choose_now_txt)
@@ -195,12 +291,13 @@ class PracticeSession(LearningSession):
                 while True:
                     tr = InstructionTrial(trial_nr=trial_nr,
                                           parameters={'cue': '',  # for compatibility
-                                                      'block_nr': session_location,  # for compatibility
+                                                      'block_nr': self.session_location,  # for compatibility
                                                       'stimulus_symbol_left': self.all_symbols[0],
                                                       'stimulus_symbol_right': self.all_symbols[1],
                                                       'p_win_left': 0.8,
                                                       'p_win_right': 0.2},
-                                          phase_durations=[0.000, 0.000, 0.000, 60, 0, 1, 0, 1, 0],
+#                                          phase_durations=[0.000, 0.000, 0.000, 60, 0, 1, 0, 1, 0],
+                                          phase_durations=[0.000, 0.000, 0.000, 60, 0, 0, 0, 1, 0],
                                           phase_names=self.phase_names,
                                           session=self,
                                           decoration_objects=next_texts + move_on_text + choose_now_txt)
@@ -221,12 +318,13 @@ class PracticeSession(LearningSession):
                         bottom_pos=5)
                     tr = CheckTrial(trial_nr=trial_nr,
                                     parameters={'cue': '',  # for compatibility
-                                                'block_nr': session_location,  # for compatibility
+                                                'block_nr': self.session_location,  # for compatibility
                                                 'stimulus_symbol_left': self.all_symbols[0],
                                                 'stimulus_symbol_right': self.all_symbols[1],
                                                 'p_win_left': 0.8,
                                                 'p_win_right': 0.2},
-                                    phase_durations=[0.000, 0.000, 0.000, 60, 0, 1, 0, 60, 0],
+#                                    phase_durations=[0.000, 0.000, 0.000, 60, 0, 1, 0, 60, 0],
+                                    phase_durations=[0.000, 0.000, 0.000, 60, 0, 0, 0, 60, 0],
                                     phase_names=self.phase_names,
                                     session=self,
                                     decoration_objects=next_texts,
@@ -234,9 +332,10 @@ class PracticeSession(LearningSession):
                     tr.run()
                     answer_1_checked = True
                     if tr.last_key == 'backspace':
-                        session_location += 1  # add one, which will be subtracted at the end of the outer while loop
+                        self.session_location_idx += 1  # add one, which will be subtracted at the end of the outer
+                        # while loop
 
-            elif session_location == 4:
+            elif self.session_location == 6:
                 next_texts = self.generate_text_objects(
                     ['It\'s important to realise that:',
                      '- The low probability symbol *sometimes* gives a reward,\n'
@@ -253,11 +352,12 @@ class PracticeSession(LearningSession):
                                session=self)
                 tr.run()
 
-            elif session_location == 5:
+            elif self.session_location == 7:
                 next_texts = self.generate_text_objects(
                     ['Let\'s try again with new symbols. It\'s more difficult now',
                      'and the location of the symbols will alternate randomly',
-                     'Make a couple of decisions by pressing <z> for left or <m> for right'],
+                     'Make a couple of decisions by pressing <{}> for left or <{}> for right'.format(
+                         self.response_button_signs[0], self.response_button_signs[1])],
                     bottom_pos=5)
                 choose_now_txt = [
                     visual.TextStim(win=self.win, text='Make a choice now',
@@ -270,12 +370,13 @@ class PracticeSession(LearningSession):
                                                                                self.all_symbols[3]])
                         tr = InstructionTrial(trial_nr=trial_nr,
                                               parameters={'cue': '',      # for compatibility
-                                                          'block_nr': session_location,  # for compatibility
+                                                          'block_nr': self.session_location,  # for compatibility
                                                           'stimulus_symbol_left': symbols[0],
                                                           'stimulus_symbol_right': symbols[1],
                                                           'p_win_left': ps[0],
                                                           'p_win_right': ps[1]},
-                                              phase_durations=[0.000, 0.000, 0.000, 60, 0, 1, 0, 1, 0],
+#                                              phase_durations=[0.000, 0.000, 0.000, 60, 0, 1, 0, 1, 0],
+                                              phase_durations=[0.000, 0.000, 0.000, 60, 0, 0, 0, 1, 0],
                                               phase_names=self.phase_names,
                                               session=self,
                                               decoration_objects=next_texts + choose_now_txt)
@@ -285,19 +386,19 @@ class PracticeSession(LearningSession):
                     loop_2_done = True
 
                 while True:
-                    symbols, ps = self.get_random_stimuli_ps()
-
+                    # symbols, ps = self.get_random_stimuli_ps()
                     symbols, ps, _ = self.get_random_cue_location(ps=[0.65, 0.35],
                                                                   symbols=[self.all_symbols[2],
                                                                            self.all_symbols[3]])
                     tr = InstructionTrial(trial_nr=trial_nr,
                                           parameters={'cue': '',  # for compatibility
-                                                      'block_nr': session_location,
+                                                      'block_nr': self.session_location,
                                                       'stimulus_symbol_left': symbols[0],
                                                       'stimulus_symbol_right': symbols[1],
                                                       'p_win_left': ps[0],
                                                       'p_win_right': ps[1]},
-                                          phase_durations=[0.000, 0.000, 0.000, 60, 0, 1, 0, 1, 0],
+#                                          phase_durations=[0.000, 0.000, 0.000, 60, 0, 1, 0, 1, 0],
+                                          phase_durations=[0.000, 0.000, 0.000, 60, 0, 0, 0, 1, 0],
                                           phase_names=self.phase_names,
                                           session=self,
                                           decoration_objects=next_texts + move_on_text + choose_now_txt)
@@ -317,26 +418,28 @@ class PracticeSession(LearningSession):
                         bottom_pos=5)
                     tr = CheckTrial(trial_nr=trial_nr,
                                     parameters={'cue': '',      # for compatibility
-                                                'block_nr': session_location,  # for compatibility
+                                                'block_nr': self.session_location,  # for compatibility
                                                 'stimulus_symbol_left': self.all_symbols[2],
                                                 'stimulus_symbol_right': self.all_symbols[3],
                                                 'p_win_left': 0.8,
                                                 'p_win_right': 0.2},
-                                    phase_durations=[0.000, 0.000, 0.000, 60, 0, 1, 0, 60, 0],
+#                                    phase_durations=[0.000, 0.000, 0.000, 60, 0, 1, 0, 60, 0],
+                                    phase_durations=[0.000, 0.000, 0.000, 60, 0, 0, 0, 60, 0],
                                     phase_names=self.phase_names,
                                     session=self,
                                     decoration_objects=next_texts)
                     tr.run()
                     answer_2_checked = True
                     if tr.last_key == 'backspace':
-                        session_location += 1  # add one, which will be subtracted at the end of the outer while loop
+                        self.session_location_idx += 1  # add one, which will be subtracted at the end of the outer
+                        # while loop
 
-            elif session_location == 6:
+            elif self.session_location == 8:
                 next_texts = self.generate_text_objects(
                     ['Well done!',
                      '',
                      'The experiment consists of multiple \'blocks\'',
-                     'Within each block, you will see *two or three* different pairs of symbols',
+                     'Within each block, you will see *three* different pairs of symbols',
                      'that you need to choose between', '',
                      'These pairs of symbols alternate between trials',
                      '',
@@ -350,9 +453,11 @@ class PracticeSession(LearningSession):
                                session=self)
                 tr.run()
 
-            elif session_location == 7:
+            elif self.session_location == 9:
                 next_texts = self.generate_text_objects(
-                    ['You will next practice a short block of trials with alternating symbols'],
+                    ['You will next practice a short block of trials with alternating symbols',
+                     '',
+                     'Note that the options do not immediately disappear when you press a button. This is normal.'],
                     bottom_pos=5, degrees_per_line=1)
                 tr = TextTrial(trial_nr=trial_nr,
                                parameters={},
@@ -363,19 +468,18 @@ class PracticeSession(LearningSession):
 
                 trial_nr += 1
                 ## ugly: disable timing feedback in this block
-                self.show_timing_feedback = False
                 for i in range(15):
                     symbols, ps = self.get_random_stimuli_ps()
                     symbols, ps, cue = self.get_random_cue_location(ps=ps, symbols=symbols)
 
                     tr = LearningTrial(trial_nr=trial_nr,
                                        parameters={'cue': 'ACC',
-                                                   'block_nr': session_location,
+                                                   'block_nr': self.session_location,
                                                    'stimulus_symbol_left': symbols[0],
                                                    'stimulus_symbol_right': symbols[1],
                                                    'p_win_left': ps[0],
                                                    'p_win_right': ps[1],
-                                                   'n_trs': None},
+                                                   'n_trs': 5},
                                        phase_durations=self.get_jittered_durations(include_cue=False),
                                        phase_names=self.phase_names,
                                        session=self)
@@ -383,10 +487,10 @@ class PracticeSession(LearningSession):
                     tr.last_key = tr.last_resp  # for compatibility
                     trial_nr += 1
 
-                self.show_timing_feedback = True
-                session_location += 1  # manually forward here, since last key is not 'space'
+                self.move_forward()
+                #session_location += 1  # manually forward here, since last key is not 'space'
 
-            elif session_location == 8:
+            elif self.session_location == 10:
                 next_texts = self.generate_text_objects(
                     ['Alright, well done so far!',
                      'The final aspect of the task are the *cues*'],
@@ -398,7 +502,7 @@ class PracticeSession(LearningSession):
                                session=self)
                 tr.run()
 
-            elif session_location == 9:
+            elif self.session_location == 11:
                 next_texts = self.generate_text_objects(
                     ['Cues instruct you, before each trial, how fast you should respond',
                      '',
@@ -415,7 +519,7 @@ class PracticeSession(LearningSession):
                                session=self)
                 tr.run()
 
-            elif session_location == 10:
+            elif self.session_location == 12:
                 next_texts = self.generate_text_objects(
                     ['Following the SPD / ACC cues is important!', '',
                      'If you see "SPD" but respond too slowly, you *lose* 100 points',
@@ -431,7 +535,7 @@ class PracticeSession(LearningSession):
                                session=self)
                 tr.run()
 
-            elif session_location == 11:
+            elif self.session_location == 13:
                 next_texts = self.generate_text_objects(
                     ['Let\'s see how this works!'],
                     bottom_pos=5, degrees_per_line=1)
@@ -442,22 +546,30 @@ class PracticeSession(LearningSession):
                                session=self)
                 tr.run()
 
-            elif session_location == 12:
+            elif self.session_location == 14:
+                self.show_timing_feedback = True
+                self.prepare_objects()  # re-create objects to ensure "outcome" and "reward" are separate
+                # sorry about the ugliness of this quick-fix
                 tr = AnnotatedTrial(trial_nr=trial_nr,
                                     parameters={'cue': 'ACC',
-                                                'block_nr': session_location,
+                                                'block_nr': self.session_location,
                                                 'stimulus_symbol_left': self.all_symbols[4],
                                                 'stimulus_symbol_right': self.all_symbols[5],
                                                 'p_win_left': 1,
                                                 'p_win_right': 1},
-                                    phase_durations=[5, 5, 0, 60, 0, 5, 0, 7, 0, 7, 60],
+#                                    phase_durations=[5, 5, 0, 60, 0, 5, 0, 7, 0, 7, 60],
+                                    phase_durations=[5, 5, 0, 60, 3, 0, 0, 7, 0, 7, 60],
                                     phase_names=self.phase_names + ['feedback_2', 'feedback_3'],
                                     # decoration_objects=next_texts + continue_back,
                                     session=self)
                 tr.run()
                 tr.last_key = tr.last_resp
 
-            elif session_location == 13:
+            elif self.session_location == 15:
+                self.show_timing_feedback = True
+                self.prepare_objects()  # re-create objects to ensure "outcome" and "reward" are separate
+                # sorry about the ugliness of this quick-fix
+
                 next_texts = self.generate_text_objects(
                     ['Let\'s now practice this for real! When you press space bar,',
                      'a short practice block of 15 trials starts'],
@@ -477,12 +589,12 @@ class PracticeSession(LearningSession):
 
                     tr = LearningTrial(trial_nr=trial_nr,
                                        parameters={'cue': cue,
-                                                   'block_nr': session_location,
+                                                   'block_nr': self.session_location,
                                                    'stimulus_symbol_left': symbols[0],
                                                    'stimulus_symbol_right': symbols[1],
                                                    'p_win_left': ps[0],
                                                    'p_win_right': ps[1],
-                                                   'n_trs': None},
+                                                   'n_trs': 5},
                                        phase_durations=self.get_jittered_durations(),
                                        phase_names=self.phase_names,
                                        session=self)
@@ -490,11 +602,10 @@ class PracticeSession(LearningSession):
                     tr.last_key = tr.last_resp # for compatibility
                     trial_nr += 1
 
-                session_location += 1  # manually forward here, since last key is not 'space'
+                self.move_forward()
+                #session_location += 1  # manually forward here, since last key is not 'space'
 
-
-
-            if session_location == 14:
+            if self.session_location == 16:
                 next_texts = self.generate_text_objects(
                     ['That\'s it! You\'re ready!\n\n'
                      'Please keep in mind the following:\n\n'
@@ -502,6 +613,7 @@ class PracticeSession(LearningSession):
                      '- It can take some time to discover which symbols are correct, this is normal\n'
                      '- Press only one button per trial\n'
                      '- Keep your eyes on the fixation cross whenever it is present\n'
+                     '- Sometimes, you see a black screen for about 10 seconds. This is normal\n'
                      '- It can be difficult, and that is normal. Stay focused and give it your best!'],
                     bottom_pos=-1, degrees_per_line=1)
                 tr = TextTrial(trial_nr=trial_nr,
@@ -513,13 +625,60 @@ class PracticeSession(LearningSession):
 
                 trial_nr += 1
 
+            if self.session_location == 17:
+                next_texts = self.generate_text_objects(
+                    ['Next, you will again perform the symbol-learning task.', '',
+                     'This time, there will be no cues.  Always respond as fast as possible',
+                     'without making mistakes'],
+                    bottom_pos=3, degrees_per_line=1)
+                tr = TextTrial(trial_nr=trial_nr,
+                               parameters={},
+                               phase_durations=[60],
+                               decoration_objects=next_texts + continue_back,
+                               session=self)
+                tr.run()
+                trial_nr += 1
+
+            if self.session_location == 18:
+                next_texts = self.generate_text_objects(
+                    ['That\'s it! You\'re ready!\n\n'
+                     'Please keep in mind the following:\n\n'
+                     '- It can take some time to discover which symbols are correct, this is normal\n'
+                     '- Press only one button per trial\n'
+                     '- Keep your eyes on the fixation cross whenever it is present\n'
+                     '- Sometimes, you see a black screen for about 10 seconds. This is normal\n'
+                     '- It can be difficult, and that is normal. Stay focused and give it your best!'],
+                    bottom_pos=-1, degrees_per_line=1)
+                tr = TextTrial(trial_nr=trial_nr,
+                               parameters={},
+                               phase_durations=[60],
+                               decoration_objects=next_texts + continue_back,
+                               session=self)
+                tr.run()
+                trial_nr += 1
+
+            if self.session_location == 19:
+                next_texts = self.generate_text_objects(
+                    ['Next, you will again perform the symbol-learning task.',
+                     'However, this time, there will be *cues*'],
+                    bottom_pos=-1, degrees_per_line=1)
+                tr = TextTrial(trial_nr=trial_nr,
+                               parameters={},
+                               phase_durations=[60],
+                               decoration_objects=next_texts + continue_back,
+                               session=self)
+                tr.run()
+                trial_nr += 1
+
             trial_nr += 1
             if tr.last_key == 'space':
-                session_location += 1
+                self.move_forward()
+#                session_location += 1
             elif tr.last_key == 'backspace':
-                session_location -= 1
+                self.move_backward()
+#                session_location -= 1
 
-            if session_location == 15:
+            if self.stop:
                 break
 
         self.close()
@@ -527,29 +686,29 @@ class PracticeSession(LearningSession):
             self.quit()
 
 
-if __name__ == '__main__':
-    import datetime
-
-    index_number = 1
-    start_block = 0
-    scanner = False
-    simulate = 'y'
-    debug = True
-
-    timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%m%S")
-    output_str = f'sub-{index_number}_task-practice-learning_datetime-{timestamp}'
-    output_dir = './data'
-    if simulate == 'y':
-        settings_file = '/Users/steven/Sync/PhDprojects/IMCN-learningtask/IMCN-learningtask/settings_simulate.yml'
-    else:
-        settings_file = '/Users/steven/Sync/PhDprojects/IMCN-learningtask/IMCN-learningtask/settings.yml'
-
-    sess = PracticeSession(index_number=index_number,
-                           output_str=output_str,
-                           output_dir=output_dir,
-                           settings_file=settings_file,
-                           start_block=start_block)
-    sess.run()
+# if __name__ == '__main__':
+#     import datetime
+#
+#     index_number = 1
+#     start_block = 0
+#     scanner = False
+#     simulate = 'y'
+#     debug = True
+#
+#     timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%m%S")
+#     output_str = f'sub-{index_number}_task-practice-learning_datetime-{timestamp}'
+#     output_dir = './data'
+#     if simulate == 'y':
+#         settings_file = '/Users/steven/Sync/PhDprojects/IMCN-learningtask/IMCN-learningtask/settings_simulate.yml'
+#     else:
+#         settings_file = '/Users/steven/Sync/PhDprojects/IMCN-learningtask/IMCN-learningtask/settings.yml'
+#
+#     sess = PracticeSession(index_number=index_number,
+#                            output_str=output_str,
+#                            output_dir=output_dir,
+#                            settings_file=settings_file,
+#                            start_block=start_block)
+#     sess.run()
 
 
 
@@ -574,26 +733,46 @@ Session_locations, old version:
 
 
 
-Proposal / new version:
-0: You will see two choice options
-1: These act like slot machines in a casino
-2: The probability of getting a reward differs per symbol
-3: Practice single symbol 1
-4: 'It\'s important to realise that:'
-5: Let's practice again
+New version:
+0: Welcome
+1: Important to read instructions carefully
+2: You will see two choice options
+3: These act like slot machines in a casino
+4: The probability of getting a reward differs per symbol
+5: Practice single symbol 1
+6: 'It\'s important to realise that:'
+7: Let's practice again
 
 ------
-12: Introduce differing symbols
-13: Practice short block with differing symbols
-------
-6: 'Alright, well done so far!' 'The final aspect of the task are the *cues*'
-7: 'Cues instruct you to ...'
-8: 'Following the SPD / ACC cues is important!'
-9:  Let's see how this works
-10: Slow example trial / "video"
-11: Let's practice for real, 15 trials
+8: Introduce differing symbols
+9: Practice 15 trials with differing symbols
 
+------
+10: 'Alright, well done so far!' 'The final aspect of the task are the *cues*'
+11: 'Cues instruct you to ...'
+12: 'Following the SPD / ACC cues is important!'
+13:  Let's see how this works
+14: Slow example trial / "video"
+15: Let's practice for real, 15 trials
 -------
-14: You're ready
+16: You're ready SAT
+----
+17: Next, you will again perform the symbol-learning task. This time, there will be no cues. Always respond as fast 
+as possible without making mistakes. Just as a recap, you will now practice 15 trials again.
+18: You're ready Reversal
+
+19: Next, you will again perform the symbol-learning task. However, it will be a bit more complex than before, 
+since you will be presented with *cues*.
+
+
+Presentation order:
+If SAT first:
+First practice: [0 - 16]
+Second practice: [17, 9, 18]
+
+If Reversal first:
+First practice: [0-9, 19]
+Second practice: [20, 11-16]
+
 
 '''
