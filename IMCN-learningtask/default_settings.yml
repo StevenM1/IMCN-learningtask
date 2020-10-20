@@ -15,8 +15,8 @@ window:
 
 monitor:
   name: default
-  width: 60  # in cm
-  distance: 50  # in cm
+  width: 69  # in cm
+  distance: 170  # in cm
   gamma: 1
 
 mouse:
