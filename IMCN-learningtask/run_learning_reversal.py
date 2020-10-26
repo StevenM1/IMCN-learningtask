@@ -90,8 +90,10 @@ def run_learning(task_name, index_number, age, gender, start_block, dir='.'):
 def main():
     task_name = 'reversal-learning' #get_task_name()
     index_number = input_int('What is the subject num? [integer]: ')
-    age = input_int('What is your age? [integer] ')
-    gender = input_must_be('What is your gender? [f/m/NA] ', options=('f', 'm', 'NA'))
+#    age = input_int('What is your age? [integer] ')
+#    gender = input_must_be('What is your gender? [f/m/NA] ', options=('f', 'm', 'NA'))
+    age=None
+    gender=None
     start_block = input('Start block? [default 1]: ')
     try:
         start_block = int(start_block)
