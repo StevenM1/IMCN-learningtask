@@ -428,7 +428,18 @@ class LearningSession(Session):
                 self.start_experiment()
 
             if self.run_scanner_design:
+                idx = self.global_log.shape[0]
+                self.global_log.loc[idx, 'trial_nr'] = -1
+                self.global_log.loc[idx, 'onset'] = self.clock.getTime()
+                self.global_log.loc[idx, 'event_type'] = 'waiting_for_scanner'
+                self.global_log.loc[idx, 'phase'] = -1
+                idx = self.global_log.shape[0]
                 self.display_text('Waiting for scanner', keys=self.mri_trigger)
+                # log pulse
+                self.global_log.loc[idx, 'trial_nr'] = -1
+                self.global_log.loc[idx, 'onset'] = self.clock.getTime()
+                self.global_log.loc[idx, 'event_type'] = 'pulse'
+                self.global_log.loc[idx, 'phase'] = -1
             self.timer.reset()
 
             # loop over trials
