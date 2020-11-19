@@ -76,8 +76,8 @@ stimulus:
   x_pos: [-4, 4]
 
 input:
-  response_button_left: b
-  response_button_right: c
+  response_button_left: r
+  response_button_right: b
 
 text:
   units: deg
